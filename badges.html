@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Badges | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>Badges</h1>
+  <div id="list" class="grid cols-3">Loading…</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Api.get("/api/badges").then(rows => {
+  document.getElementById("list").innerHTML = rows.map(b => `
+    <div class="card">
+      <div style="font-size:1.8rem;">${b.emoji}</div>
+      <strong>${esc(b.name)}</strong>
+      <p class="subtitle">${esc(b.description)}</p>
+      <p class="subtitle" style="margin-bottom:0;">Held by ${b.holder_count} player${b.holder_count !== 1 ? "s" : ""}</p>
+    </div>`).join("") || "<p>No badges yet.</p>";
+}).catch(e => { document.getElementById("list").innerHTML = e.message; });
+</script>
+</body>
+</html>

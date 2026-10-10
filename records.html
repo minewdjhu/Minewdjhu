@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hall of Records | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>🏛️ Hall of Records</h1>
+  <p class="lede">Long-term bragging rights, these update automatically whenever someone beats them.</p>
+  <div id="records" class="grid cols-3">Loading…</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+const LABELS = {
+  largest_portfolio: "💼 Largest net worth",
+  biggest_single_gain: "💰 Biggest single gain",
+  biggest_market_move_pct: "🎢 Biggest market move",
+  longest_login_streak: "🔥 Longest login streak",
+};
+Api.get("/api/records").then(rows => {
+  document.getElementById("records").innerHTML = rows.map(r => `
+    <div class="card">
+      <strong>${LABELS[r.category] || r.category}</strong>
+      <div style="font-family:var(--font-mono); font-size:1.4rem; margin:0.3rem 0;">${r.value.toFixed(2)}</div>
+      <p class="subtitle">${r.holder_username ? `<a href="profile.html?username=${esc(r.holder_username)}">${esc(r.holder_username)}</a>` : "-"} ${r.context ? "- " + r.context : ""}</p>
+    </div>
+  `).join("") || "<p>No records set yet, go make some history!</p>";
+}).catch(e => { document.getElementById("records").innerHTML = e.message; });
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow">
+  <h1>Bank</h1>
+  <p class="lede">Your wallet is for trading. Your bank earns interest, slowly, and has a capacity, deposit what you're not actively using.</p>
+  <div id="summary" class="grid cols-2">Loading…</div>
+
+  <div id="error" class="alert error hidden"></div>
+  <div id="success" class="alert success hidden"></div>
+
+  <h2>Deposit</h2>
+  <div class="trade-form"><input type="number" id="deposit-amount" min="0.01" step="0.01" placeholder="Amount">
+    <button class="btn" onclick="doDeposit()">Deposit</button></div>
+
+  <h2>Withdraw</h2>
+  <div class="trade-form"><input type="number" id="withdraw-amount" min="0.01" step="0.01" placeholder="Amount">
+    <button class="btn secondary" onclick="doWithdraw()">Withdraw</button></div>
+
+  <h2>Recent activity</h2>
+  <table><thead><tr><th>Type</th><th>Amount</th><th>Note</th><th>When</th></tr></thead>
+    <tbody id="recent-rows"><tr><td colspan="4">Loading…</td></tr></tbody></table>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+
+async function render() {
+  try {
+    const b = await Api.get("/api/bank");
+    document.getElementById("summary").innerHTML = `
+      <div class="stat-tile"><div class="label">Bank balance</div><div class="value">${money(b.balance)}</div></div>
+      <div class="stat-tile"><div class="label">Capacity</div><div class="value">${money(b.capacity)}</div></div>
+      <div class="stat-tile"><div class="label">Interest</div><div class="value">${b.interest_pct_per_day}%/day</div></div>
+      <div class="stat-tile"><div class="label">Room left</div><div class="value">${money(b.capacity - b.balance)}</div></div>
+    `;
+    document.getElementById("recent-rows").innerHTML = b.recent_transactions.map(t => `
+      <tr><td>${esc(t.type)}</td><td class="price">${money(t.amount)}</td><td>${esc(t.note || "")}</td><td>${new Date(t.ts).toLocaleString()}</td></tr>
+    `).join("") || `<tr><td colspan="4">No activity yet.</td></tr>`;
+  } catch (e) {
+    document.getElementById("summary").innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
+  }
+}
+
+async function doDeposit() {
+  const errEl = document.getElementById("error"), okEl = document.getElementById("success");
+  clearError(errEl); okEl.classList.add("hidden");
+  try {
+    await Api.post("/api/bank/deposit", { amount: parseFloat(document.getElementById("deposit-amount").value) });
+    okEl.textContent = "Deposited."; okEl.classList.remove("hidden");
+    render();
+  } catch (e) { showError(errEl, e); }
+}
+async function doWithdraw() {
+  const errEl = document.getElementById("error"), okEl = document.getElementById("success");
+  clearError(errEl); okEl.classList.add("hidden");
+  try {
+    await Api.post("/api/bank/withdraw", { amount: parseFloat(document.getElementById("withdraw-amount").value) });
+    okEl.textContent = "Withdrawn."; okEl.classList.remove("hidden");
+    render();
+  } catch (e) { showError(errEl, e); }
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>Account settings</h1>
+
+  <h2>Profile customization</h2>
+  <div id="custom-error" class="alert error hidden"></div>
+  <form class="stacked" id="custom-form">
+    <label>Display name<input type="text" id="display_name" maxlength="40"></label>
+    <label>Title<input type="text" id="title" maxlength="40" placeholder="e.g. Market Watcher"></label>
+    <label>Theme
+      <select id="theme"><option value="default">Default</option><option value="midnight">Midnight</option><option value="sunrise">Sunrise</option><option value="forest">Forest</option><option value="neon">Neon</option></select>
+    </label>
+    <label>Border
+      <select id="border"><option value="default">Default</option><option value="bronze">Bronze</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="diamond">Diamond</option></select>
+    </label>
+    <button class="btn" type="submit">Save</button>
+  </form>
+
+  <h2>Discord linking</h2>
+  <div id="discord-section">Loading…</div>
+
+  <h2>Change PIN</h2>
+  <div id="pin-error" class="alert error hidden"></div>
+  <div id="pin-success" class="alert success hidden"></div>
+  <form class="stacked" id="pin-form">
+    <label>New 6-digit PIN<input type="password" id="new_pin" inputmode="numeric" maxlength="6" required></label>
+    <button class="btn secondary" type="submit">Change PIN</button>
+  </form>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+
+async function loadProfile() {
+  const p = await Api.get("/api/profile/me");
+  document.getElementById("display_name").value = p.display_name || "";
+  document.getElementById("title").value = p.title || "";
+  document.getElementById("theme").value = p.theme;
+  document.getElementById("border").value = p.border;
+}
+loadProfile();
+
+document.getElementById("custom-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("custom-error");
+  clearError(errEl);
+  try {
+    await Api.post("/api/profile/customize", {
+      display_name: document.getElementById("display_name").value.trim() || null,
+      title: document.getElementById("title").value.trim() || null,
+      theme: document.getElementById("theme").value,
+      border: document.getElementById("border").value,
+    });
+    alert("Saved!");
+  } catch (err) { showError(errEl, err); }
+});
+
+async function loadDiscord() {
+  const el = document.getElementById("discord-section");
+  try {
+    const status = await Api.get("/api/account/link-discord");
+    if (status.linked) {
+      el.innerHTML = `<div class="alert success">Linked to Discord ID <code>${status.discord_id}</code>.</div>
+        <button class="btn secondary" onclick="unlinkDiscord()">Unlink</button>`;
+    } else {
+      el.innerHTML = `<p class="subtitle">Link your Discord account to use /balance, /profile and more right from the server.</p>
+        <button class="btn" onclick="generateCode()">Generate a link code</button><div id="code-result"></div>`;
+    }
+  } catch (e) { el.innerHTML = "Couldn't load link status."; }
+}
+loadDiscord();
+
+async function generateCode() {
+  try {
+    const r = await Api.post("/api/account/link-discord/generate");
+    document.getElementById("code-result").innerHTML = `
+      <div class="alert success" style="margin-top:0.8rem;">Your code: <strong style="font-family:var(--font-mono); font-size:1.3rem;">${r.code}</strong><br>
+      In Discord, run <code>/link ${r.code}</code> within ${r.expires_in_minutes} minutes.</div>`;
+  } catch (e) { alert(e.message); }
+}
+async function unlinkDiscord() {
+  await Api.post("/api/account/link-discord/unlink");
+  loadDiscord();
+}
+
+document.getElementById("pin-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("pin-error"), okEl = document.getElementById("pin-success");
+  clearError(errEl); okEl.classList.add("hidden");
+  try {
+    await Api.post("/api/auth/change-pin?new_pin=" + encodeURIComponent(document.getElementById("new_pin").value.trim()));
+    okEl.textContent = "PIN changed.";
+    okEl.classList.remove("hidden");
+    document.getElementById("new_pin").value = "";
+  } catch (err) { showError(errEl, err); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minewdjhu</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <section class="hero">
+    <h1>Welcome to <span class="grad-text">Minewdjhu</span></h1>
+    <p class="lede">A made-up economy for a real community. Trade markets, ride a crash, spin the wheel and climb the leaderboard. Everything works whether or not anyone else is online right now.</p>
+    <div class="chip-row">
+      <a class="btn" href="markets.html">Explore markets</a>
+      <a class="btn secondary" href="arcade.html">Play the arcade</a>
+    </div>
+  </section>
+
+  <div id="welcome-back" class="card welcome hidden"></div>
+
+  <div id="guest-card" class="card hidden">
+    <div class="card-row">
+      <div><strong>New here?</strong><div class="subtitle" style="margin-bottom:0;">Sign up for a free starting balance and jump in.</div></div>
+      <a class="btn" href="register.html">Create an account</a>
+    </div>
+  </div>
+
+  <div id="world-mood" class="card hidden"></div>
+
+  <h2>📊 Biggest movers right now</h2>
+  <ul id="movers" class="mover-list"><li>Loading…</li></ul>
+
+  <h2>📰 Latest news</h2>
+  <div id="news-preview" class="grid cols-3"></div>
+</main>
+<footer class="site-footer"><div class="footer-inner">
+  <span>Minewdjhu, a fictional economy. MWD has no real-world value.</span>
+  <span><a href="events.html">Events</a> · <a href="news.html">News</a></span>
+</div></footer>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+async function load() {
+  if (!Auth.isLoggedIn()) document.getElementById("guest-card").classList.remove("hidden");
+
+  if (Auth.isLoggedIn()) {
+    try {
+      const w = await Api.get("/api/welcome-back");
+      const parts = [];
+      if (w.market_moves.length) parts.push(`&#128200; ${w.market_moves.slice(0, 3).join(", ")}`);
+      if (w.news_count) parts.push(`&#128240; ${w.news_count} news article${w.news_count > 1 ? "s" : ""}`);
+      if (w.badges_earned) parts.push(`&#127942; You earned ${w.badges_earned} badge${w.badges_earned > 1 ? "s" : ""}`);
+      if (w.events_happened.length) parts.push(`&#127881; Ended: ${w.events_happened.join(", ")}`);
+      if (w.bank_interest_earned > 0) parts.push(`&#128176; Your bank earned ${money(w.bank_interest_earned)} MWD`);
+      if (parts.length) {
+        const box = document.getElementById("welcome-back");
+        box.innerHTML = `<strong>Welcome back</strong><div class="subtitle">While you were away:</div><ul class="plain">${parts.map(p => `<li>${p}</li>`).join("")}</ul>`;
+        box.classList.remove("hidden");
+      }
+    } catch (e) { /* non fatal */ }
+  }
+
+  try {
+    const ws = await Api.get("/api/world-state");
+    const moodCard = document.getElementById("world-mood");
+    let html = `<strong>${esc(ws.season)}</strong>, mood: <span class="badge-pill">${esc(ws.global_mood)}</span>`;
+    if (ws.featured_market_symbol) html += ` · Featured: <a href="market.html?symbol=${ws.featured_market_symbol}">${ws.featured_market_symbol}</a>`;
+    if (ws.mystery_text) html += `<div class="subtitle" style="margin:0.4rem 0 0;">🔎 ${esc(ws.mystery_text)}</div>`;
+    if (ws.creator_announcement) html += `<div class="subtitle" style="margin:0.2rem 0 0;">📣 ${esc(ws.creator_announcement)}</div>`;
+    moodCard.innerHTML = html;
+    moodCard.classList.remove("hidden");
+  } catch (e) { /* non-fatal */ }
+
+  try {
+    const markets = await Api.get("/api/markets");
+    const sorted = markets.filter(m => m.status === "active").sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 6);
+    const list = document.getElementById("movers");
+    list.innerHTML = sorted.map(m => `
+      <li><a href="market.html?symbol=${esc(m.symbol)}"><span class="symbol">${esc(m.symbol)}</span>, ${esc(m.name)}</a>
+      <span class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</span></li>
+    `).join("") || "<li>No markets yet.</li>";
+  } catch (e) {
+    document.getElementById("movers").innerHTML = `<li>Couldn't load markets: ${esc(e.message)}</li>`;
+  }
+
+  try {
+    const news = await Api.get("/api/news?limit=3");
+    document.getElementById("news-preview").innerHTML = news.map(a => `
+      <div class="card"><strong><a href="news.html">${esc(a.title)}</a></strong><p class="subtitle">${esc(a.summary)}</p></div>
+    `).join("") || "<p class='subtitle'>No articles yet.</p>";
+  } catch (e) { /* non-fatal */ }
+}
+load();
+</script>
+</body>
+</html>

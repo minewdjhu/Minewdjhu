@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>Events</h1>
+  <div id="list">Loading…</div>
+
+  <h2>🗨️ Community feed</h2>
+  <div class="chat-box" id="chat-box">Loading…</div>
+  <div id="chat-form"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+function eventCardClass(type) {
+  if (type === "market_crash") return "crash";
+  if (type === "market_boom") return "boom";
+  if (type === "market_mania") return "mania";
+  return "";
+}
+
+async function load() {
+  try {
+    const events = await Api.get("/api/events");
+    const active = events.filter(e => e.status === "active");
+    const scheduled = events.filter(e => e.status === "scheduled");
+    document.getElementById("list").innerHTML = `
+      <h2>🔴 Active</h2>
+      <div class="grid cols-2">${active.map(e => `
+        <div class="card event-card ${eventCardClass(e.type)}">
+          <div class="card-row"><strong>${esc(e.title)}</strong><span class="badge-pill">${e.type.replace(/_/g," ")}</span></div>
+          <p class="subtitle">${esc(e.description)}</p>
+          ${e.progress_pct !== null ? `<div class="progress-track"><div class="progress-fill" style="width:${e.progress_pct}%;"></div></div>
+            <div class="subtitle" style="margin:0.3rem 0 0;">${e.progress_pct.toFixed(1)}% of goal</div>` : ""}
+        </div>`).join("") || "<p>Nothing active right now.</p>"}</div>
+      <h2>🗓️ Scheduled</h2>
+      <div class="grid cols-2">${scheduled.map(e => `
+        <div class="card"><strong>${esc(e.title)}</strong><p class="subtitle">${esc(e.description)}</p>
+        <p class="subtitle">Starts ${new Date(e.starts_at).toLocaleString()}</p></div>`).join("") || "<p>Nothing scheduled.</p>"}</div>
+    `;
+  } catch (e) { document.getElementById("list").innerHTML = e.message; }
+
+  try {
+    const msgs = await Api.get("/api/chat/global");
+    document.getElementById("chat-box").innerHTML = msgs.map(m => `<div class="chat-msg"><span class="who">${esc(m.username)}:</span> ${esc(m.body)}</div>`).join("") || "No messages yet.";
+  } catch (e) { document.getElementById("chat-box").innerHTML = "Couldn't load feed."; }
+
+  document.getElementById("chat-form").innerHTML = Auth.isLoggedIn() ? `
+    <div class="chat-post-row"><input type="text" id="chat-input" maxlength="280" placeholder="Say something…">
+    <button class="btn" onclick="postGlobalChat()">Post</button></div>
+  ` : `<p class="subtitle"><a href="login.html">Log in</a> to join the feed.</p>`;
+}
+async function postGlobalChat() {
+  const input = document.getElementById("chat-input");
+  const body = input.value.trim();
+  if (!body) return;
+  try { await Api.post("/api/chat/global", { body }); input.value = ""; load(); }
+  catch (e) { alert(e.message); }
+}
+load();
+</script>
+</body>
+</html>

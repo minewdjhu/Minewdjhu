@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcade | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>Arcade</h1>
+  <p class="lede">Free to play, no stake, ever. You always walk away with something. Daily limits apply so everyone gets a fair shot.</p>
+  <div id="summary-bar" class="card hidden"></div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>🎡 MWD Wheel</h3>
+      <p class="subtitle">One free spin a day. Always pays something.</p>
+      <div class="wheel-wrap">
+        <div style="position:relative;">
+          <div class="wheel-pointer">🔻</div>
+          <div class="wheel" id="wheel"></div>
+        </div>
+        <button class="btn" id="spin-btn" onclick="spinWheel()">Spin</button>
+        <div id="wheel-result" class="alert info hidden"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🧠 Minewdjhu Quiz</h3>
+      <p class="subtitle">Answer correctly for a bigger reward.</p>
+      <div id="quiz-area"><button class="btn" onclick="newQuestion()">Get a question</button></div>
+    </div>
+
+    <div class="card">
+      <h3>📈 Market Mayhem</h3>
+      <p class="subtitle">Guess a market's next move.</p>
+      <div id="mayhem-area">Loading markets…</div>
+    </div>
+
+    <div class="card">
+      <h3>🏃 OOGA Run / 👾 DONG Dodger</h3>
+      <p class="subtitle">Quick reflex mini-games, press the button as many times as you can in 5 seconds!</p>
+      <div id="reflex-area">
+        <button class="btn" onclick="startReflex('ooga_run')">Play OOGA Run</button>
+        <button class="btn secondary" onclick="startReflex('dong_dodger')">Play DONG Dodger</button>
+        <div id="reflex-game" style="margin-top:1rem;"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+
+async function loadSummary() {
+  try {
+    const s = await Api.get("/api/arcade/summary");
+    const bar = document.getElementById("summary-bar");
+    bar.classList.remove("hidden");
+    bar.innerHTML = `Earned today: <strong>${money(s.reward_today)}</strong> / ${money(s.reward_cap)} daily cap`;
+  } catch (e) { /* ignore */ }
+}
+loadSummary();
+
+// --- MWD Wheel ---
+const WHEEL_ANGLES = { 5: 30, 10: 100, 15: 170, 25: 230, 50: 290, 100: 340 };
+async function spinWheel() {
+  const btn = document.getElementById("spin-btn");
+  btn.disabled = true;
+  const resEl = document.getElementById("wheel-result");
+  resEl.classList.add("hidden");
+  try {
+    const result = await Api.post("/api/arcade/mwd-wheel/spin");
+    const baseAngle = WHEEL_ANGLES[result.reward] ?? 0;
+    const spins = 4 * 360;
+    document.getElementById("wheel").style.transform = `rotate(${spins + (360 - baseAngle)}deg)`;
+    setTimeout(() => {
+      resEl.textContent = `🎉 You won ${result.reward} MWD!`;
+      resEl.classList.remove("hidden");
+      loadSummary();
+    }, 3000);
+  } catch (e) {
+    resEl.textContent = e.message;
+    resEl.classList.remove("hidden");
+    btn.disabled = false;
+  }
+}
+
+// --- Quiz ---
+let currentQuizToken = null;
+async function newQuestion() {
+  const area = document.getElementById("quiz-area");
+  try {
+    const q = await Api.get("/api/arcade/minewdjhu-quiz/question");
+    currentQuizToken = q.token;
+    area.innerHTML = `<p>${esc(q.question)}</p>` +
+      q.options.map((opt, i) => `<button class="btn secondary quiz-option" onclick="answerQuiz(${i})">${opt}</button>`).join("");
+  } catch (e) { area.innerHTML = e.message; }
+}
+async function answerQuiz(index) {
+  try {
+    const r = await Api.post("/api/arcade/minewdjhu-quiz/answer", { token: currentQuizToken, answer_index: index });
+    document.getElementById("quiz-area").innerHTML = `<div class="alert ${r.correct ? 'success' : 'info'}">
+      ${r.correct ? "Correct!" : "Not quite."} You earned ${r.reward} MWD.</div>
+      <button class="btn" onclick="newQuestion()">Next question</button>`;
+    loadSummary();
+  } catch (e) { alert(e.message); }
+}
+
+// --- Market Mayhem ---
+async function loadMayhem() {
+  const area = document.getElementById("mayhem-area");
+  try {
+    const markets = await Api.get("/api/markets");
+    const active = markets.filter(m => m.status === "active");
+    area.innerHTML = `
+      <select id="mayhem-symbol">${active.map(m => `<option value="${esc(m.symbol)}">${esc(m.symbol)}</option>`).join("")}</select>
+      <div class="chip-row" style="margin-top:0.6rem;">
+        <button class="btn" onclick="guessMayhem('up')">📈 Up</button>
+        <button class="btn secondary" onclick="guessMayhem('down')">📉 Down</button>
+      </div>
+      <div id="mayhem-result"></div>`;
+  } catch (e) { area.innerHTML = e.message; }
+}
+loadMayhem();
+async function guessMayhem(guess) {
+  const symbol = document.getElementById("mayhem-symbol").value;
+  try {
+    const r = await Api.post("/api/arcade/market-mayhem/guess", { symbol, guess });
+    document.getElementById("mayhem-result").innerHTML = `<div class="alert ${r.correct ? 'success' : 'info'}">
+      It went ${r.actual}. ${r.correct ? "You called it!" : "Not this time."} +${r.reward} MWD.</div>`;
+    loadSummary();
+  } catch (e) { alert(e.message); }
+}
+
+// --- Reflex games (client animates/counts, backend validates+caps the reward) ---
+function startReflex(game) {
+  const area = document.getElementById("reflex-game");
+  let score = 0;
+  let timeLeft = 5.0;
+  area.innerHTML = `<div>Time left: <span id="reflex-time">5.0</span>s, Score: <span id="reflex-score">0</span></div>
+    <button class="btn" id="reflex-btn" style="margin-top:0.5rem;">MASH ME!</button>`;
+  const btn = document.getElementById("reflex-btn");
+  btn.onclick = () => { score++; document.getElementById("reflex-score").textContent = score; };
+  const timer = setInterval(() => {
+    timeLeft -= 0.1;
+    document.getElementById("reflex-time").textContent = Math.max(0, timeLeft).toFixed(1);
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      btn.disabled = true;
+      submitReflex(game, score);
+    }
+  }, 100);
+}
+async function submitReflex(game, score) {
+  const path = game === "ooga_run" ? "/api/arcade/ooga-run/report" : "/api/arcade/dong-dodger/report";
+  try {
+    const r = await Api.post(path, { score });
+    document.getElementById("reflex-game").innerHTML += `<div class="alert success" style="margin-top:0.6rem;">Final score ${score}, earned ${r.reward} MWD.</div>`;
+    loadSummary();
+  } catch (e) {
+    document.getElementById("reflex-game").innerHTML += `<div class="alert error" style="margin-top:0.6rem;">${esc(e.message)}</div>`;
+  }
+}
+</script>
+</body>
+</html>

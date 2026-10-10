@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <div id="content">Loading…</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+const viewingUsername = qs("username");
+const isOwn = !viewingUsername || viewingUsername === Auth.getUsername();
+
+async function render() {
+  const content = document.getElementById("content");
+  if (!isOwn && !viewingUsername) { content.innerHTML = "<p>No profile specified.</p>"; return; }
+  if (isOwn) Auth.requireLogin();
+
+  let p;
+  try {
+    p = isOwn ? await Api.get("/api/profile/me") : await Api.get(`/api/profile/${viewingUsername}`);
+  } catch (e) {
+    content.innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <h1>${esc(p.display_name || p.username)} ${p.is_admin ? '<span class="badge-pill admin-link" style="border-color:var(--warn); color:var(--warn);">staff</span>' : ''} ${p.is_risky_creator ? '<span class="badge-pill warn-risky">⚠ risky creator</span>' : ''}</h1>
+    ${p.title ? `<p class="subtitle">"${esc(p.title)}"</p>` : ''}
+    <div class="grid cols-4">
+      <div class="stat-tile"><div class="label">Wallet</div><div class="value">${money(p.balance)}</div></div>
+      <div class="stat-tile"><div class="label">Bank</div><div class="value">${money(p.bank_balance)}</div></div>
+      <div class="stat-tile"><div class="label">Portfolio</div><div class="value">${money(p.portfolio_value)}</div></div>
+      <div class="stat-tile"><div class="label">Net worth</div><div class="value">${money(p.balance + p.bank_balance + p.portfolio_value)}</div></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:0.6rem;">
+      <div class="stat-tile"><div class="label">Login streak</div><div class="value">${p.current_streak_days} days</div></div>
+      <div class="stat-tile"><div class="label">Longest streak</div><div class="value">${p.longest_streak_days} days</div></div>
+    </div>
+
+    ${isOwn ? `<p class="subtitle" style="margin-top:1rem;"><a href="account.html">Account settings, Discord linking &amp; customization →</a></p>` : ""}
+
+    <h2>Badges</h2>
+    <div class="chip-row">
+      ${p.badges.map(b => `<span class="badge-pill" title="${esc(b.description)}">${b.emoji} ${esc(b.name)}</span>`).join("") || "<span class='subtitle'>No badges yet.</span>"}
+    </div>
+
+    <h2>Holdings</h2>
+    <table><thead><tr><th>Symbol</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value</th><th>P/L</th></tr></thead>
+      <tbody>
+      ${p.holdings.map(h => `
+        <tr><td class="symbol"><a href="market.html?symbol=${esc(h.symbol)}">${esc(h.symbol)}</a></td>
+        <td>${h.shares.toFixed(4)}</td><td class="price">${money(h.avg_cost)}</td><td class="price">${money(h.price)}</td>
+        <td class="price">${money(h.market_value)}</td>
+        <td class="${h.unrealized_pl >= 0 ? 'pct-up' : 'pct-down'}">${money(h.unrealized_pl)}</td></tr>
+      `).join("") || `<tr><td colspan="6">No holdings yet.</td></tr>`}
+      </tbody></table>
+  `;
+}
+render();
+</script>
+</body>
+</html>

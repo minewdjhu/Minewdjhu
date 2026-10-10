@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script>
+  // GitHub Pages serves this file for any missing address, so relative links would break.
+  // Work out the site's base path (the repository name on github.io, or "/" elsewhere) first.
+  var BASE = location.hostname.endsWith("github.io") ? "/" + location.pathname.split("/")[1] + "/" : "/";
+  document.write('<link rel="stylesheet" href="' + BASE + 'css/style.css">');
+</script>
+</head>
+<body>
+<main class="page">
+  <div class="error-page">
+    <div class="code">404</div>
+    <h1>This page just got delisted.</h1>
+    <p class="lede" style="margin:0 auto 1rem;">Whatever you were looking for was frozen by the Control Room, crashed to zero, or never existed. Our analysts are baffled.</p>
+    <p class="subtitle"><em>"We're calling it a correction."</em> A Minewdjhu spokesperson, probably.</p>
+    <p class="chip-row" style="justify-content:center;">
+      <a class="btn" id="home-link" href="/">Back to safety</a>
+      <a class="btn secondary" id="markets-link" href="/">Go look at markets that do exist</a>
+    </p>
+  </div>
+</main>
+<script>
+  document.getElementById("home-link").href = BASE + "index.html";
+  document.getElementById("markets-link").href = BASE + "markets.html";
+</script>
+</body>
+</html>

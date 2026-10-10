@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaderboard | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>Leaderboard</h1>
+  <p class="lede">Ranked by net worth (wallet + bank + portfolio).</p>
+  <table><thead><tr><th>#</th><th>Player</th><th>Net worth</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="3">Loading…</td></tr></tbody></table>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Api.get("/api/leaderboard").then(rows => {
+  document.getElementById("rows").innerHTML = rows.map(r => `
+    <tr><td>${r.rank}</td><td><a href="profile.html?username=${esc(r.username)}">${esc(r.username)}</a></td><td class="price">${money(r.net_worth)}</td></tr>
+  `).join("") || `<tr><td colspan="3">No players yet.</td></tr>`;
+}).catch(e => { document.getElementById("rows").innerHTML = `<tr><td colspan="3">${esc(e.message)}</td></tr>`; });
+</script>
+</body>
+</html>

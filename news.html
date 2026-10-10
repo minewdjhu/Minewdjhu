@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>📰 MWD News Network</h1>
+  <div id="list" class="grid cols-2">Loading…</div>
+  <div id="detail"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+async function load() {
+  const slug = qs("article");
+  if (slug) {
+    try {
+      const a = await Api.get(`/api/news/${slug}`);
+      reportMilestone("read_news");
+      document.getElementById("list").classList.add("hidden");
+      document.getElementById("detail").innerHTML = `
+        <p><a href="news.html">← All news</a></p>
+        <h1>${esc(a.title)}</h1>
+        <p class="subtitle">${a.published_at ? new Date(a.published_at).toLocaleString() : ""}</p>
+        <div class="card" style="white-space:pre-wrap;">${esc(a.body)}</div>
+        ${a.footer ? `<p class="subtitle">${esc(a.footer)}</p>` : ""}`;
+    } catch (e) { document.getElementById("detail").innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+    return;
+  }
+  try {
+    const articles = await Api.get("/api/news");
+    document.getElementById("list").innerHTML = articles.map(a => `
+      <div class="card">
+        <strong><a href="news.html?article=${a.slug}">${esc(a.title)}</a></strong>
+        <p class="subtitle">${a.published_at ? new Date(a.published_at).toLocaleDateString() : ""}</p>
+        <p>${esc(a.summary)}</p>
+      </div>`).join("") || "<p>No articles published yet.</p>";
+  } catch (e) { document.getElementById("list").innerHTML = e.message; }
+}
+load();
+</script>
+</body>
+</html>

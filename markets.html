@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markets | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <div class="card-row">
+    <h1>Markets</h1>
+    <a class="btn" id="new-market-btn" href="market-new.html">+ Launch a creator-market</a>
+  </div>
+  <p class="lede">Official markets are run by the Creator Control Room. Creator-markets are made by players, check the risk badge before you ape in.</p>
+
+  <h2>Official markets</h2>
+  <table><thead><tr><th>Symbol</th><th>Name</th><th>Price</th><th>Today</th><th>Risk</th><th>Health</th></tr></thead>
+    <tbody id="official-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
+
+  <h2>Creator markets</h2>
+  <table><thead><tr><th>Symbol</th><th>Name</th><th>Creator</th><th>Price</th><th>Today</th><th>Risk</th></tr></thead>
+    <tbody id="creator-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+async function load() {
+  if (!Auth.isLoggedIn()) document.getElementById("new-market-btn").classList.add("hidden");
+  try {
+    const markets = await Api.get("/api/markets");
+    const official = markets.filter(m => !m.is_creator_market);
+    const creator = markets.filter(m => m.is_creator_market);
+
+    document.getElementById("official-rows").innerHTML = official.map(m => `
+      <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td>${esc(m.name)}</td>
+        <td class="price">${money(m.price)}</td>
+        <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
+        <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
+        <td><span class="badge-pill ${m.health}">${m.health}</span></td>
+      </tr>`).join("") || `<tr><td colspan="6">No official markets yet.</td></tr>`;
+
+    document.getElementById("creator-rows").innerHTML = creator.map(m => `
+      <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td>${esc(m.name)}</td>
+        <td>${m.creator_username || "-"}</td>
+        <td class="price">${money(m.price)}</td>
+        <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
+        <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
+      </tr>`).join("") || `<tr><td colspan="6">No creator-markets yet, be the first!</td></tr>`;
+  } catch (e) {
+    document.getElementById("official-rows").innerHTML = `<tr><td colspan="6">Couldn't load markets: ${esc(e.message)}</td></tr>`;
+  }
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow-lg">
+  <div class="card-row">
+    <h1>Notifications</h1>
+    <button class="btn secondary small" onclick="markAll()">Mark all as read</button>
+  </div>
+  <p class="lede">Badges, payouts and anything that happened to you while you were away.</p>
+  <div id="list">Loading...</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+const ICONS = { achievement: "&#127941;", market: "&#128200;", news: "&#128240;", event: "&#127881;", bank: "&#127974;", account: "&#128100;", creator: "&#127775;" };
+async function load() {
+  try {
+    const rows = await Api.get("/api/notifications?limit=100");
+    document.getElementById("list").innerHTML = rows.map(n => `
+      <a class="note ${n.is_read ? "" : "unread"}" href="${n.link || "#"}">
+        <span class="note-icon">${ICONS[n.type] || "&#128276;"}</span>
+        <span><strong>${esc(n.title)}</strong><br><span class="subtitle">${esc(n.body)}</span>
+        <br><span class="subtitle small-text">${new Date(n.created_at + "Z").toLocaleString()}</span></span>
+      </a>`).join("") || "<p class='subtitle'>Nothing yet. When something happens to you, it shows up here.</p>";
+  } catch (e) { document.getElementById("list").innerHTML = `<div class="alert error">${esc(e.message)}</div>`; }
+}
+async function markAll() { try { await Api.post("/api/notifications/read-all"); load(); refreshBell(); } catch (e) { alert(e.message); } }
+load();
+</script>
+</body>
+</html>

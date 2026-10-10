@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">Market | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <div id="content">Loading…</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/chart.js"></script>
+<script>
+const symbol = qs("symbol");
+let currentMarket = null;
+
+function fmtRisk(level) { return `<span class="badge-pill risk-${level}">${level} risk</span>`; }
+
+async function render() {
+  const content = document.getElementById("content");
+  if (!symbol) { content.innerHTML = "<p>No market specified.</p>"; return; }
+  let m, holding = null, tag = null;
+  try {
+    m = await Api.get(`/api/markets/${symbol}`);
+  } catch (e) {
+    content.innerHTML = `<div class="alert error">${esc(e.message)}</div>`;
+    return;
+  }
+  currentMarket = m;
+  reportMilestone("viewed_market");
+  document.getElementById("page-title").textContent = `${esc(m.symbol)}, Minewdjhu`;
+
+  if (Auth.isLoggedIn()) {
+    try {
+      const profile = await Api.get("/api/profile/me");
+      holding = profile.holdings.find(h => h.symbol === m.symbol) || null;
+    } catch (e) { /* ignore */ }
+    try { tag = await Api.get("/api/risk/my-tag"); } catch (e) { /* ignore */ }
+  }
+
+  const isOwner = Auth.isLoggedIn() && Auth.getUsername() === m.creator_username;
+
+  content.innerHTML = `
+    <div class="card-row">
+      <div>
+        <h1>${esc(m.symbol)} <span style="color:var(--text-dim); font-weight:500; font-size:1.1rem;">${esc(m.name)}</span></h1>
+        <div class="chip-row">
+          ${fmtRisk(m.risk_level)}
+          <span class="badge-pill ${m.health}">${m.health}</span>
+          ${m.status !== 'active' ? `<span class="badge-pill status-${esc(m.status)}">${esc(m.status)}</span>` : ''}
+          ${m.is_creator_market ? '<span class="badge-pill">creator market</span>' : ''}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:var(--font-mono); font-size:2rem; font-weight:700;">${money(m.price)}</div>
+        <div class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)} today</div>
+      </div>
+    </div>
+    <p class="lede">${esc(m.description || "")}</p>
+    ${m.is_creator_market ? `<p class="subtitle">Created by <a href="profile.html?username=${esc(m.creator_username)}">${esc(m.creator_username)}</a>, equity stake: ${(m.creator_ownership_pct || 0).toFixed(1)}%</p>` : ""}
+
+    <div class="chart-wrap"><canvas class="spark" id="chart"></canvas></div>
+
+    <details class="why">
+      <summary>Why is this ${m.health}? (Understand)</summary>
+      <p><strong>Healthy</strong> means nothing is straining the market right now. <strong>Unstable</strong> means pressure has built up after a run of growth, so a correction is more likely, or the market is frozen${m.is_creator_market ? ", or the creator holds a very small stake" : ""}. <strong>Critical</strong> means a correction is very likely soon.</p>
+      <p>Corrections are random and bounded. A market that rose 20 percent does not simply fall 20 percent. If lots of players pile in within a few minutes, that is called <em>crowding</em>, and it makes a correction more likely.</p>
+    </details>
+
+    <div class="grid cols-4" style="margin-top:1.2rem;">
+      <div class="stat-tile"><div class="label">Day open</div><div class="value">${money(m.day_open)}</div></div>
+      <div class="stat-tile"><div class="label">Prev. close</div><div class="value">${money(m.previous_close)}</div></div>
+      <div class="stat-tile"><div class="label">All-time high</div><div class="value">${money(m.all_time_high)}</div></div>
+      <div class="stat-tile"><div class="label">All-time low</div><div class="value">${money(m.all_time_low)}</div></div>
+    </div>
+
+    <div id="trade-error" class="alert error hidden"></div>
+    <div id="trade-success" class="alert success hidden"></div>
+
+    ${Auth.isLoggedIn() ? (m.status === 'active' ? `
+      <h2>Trade</h2>
+      <div class="grid cols-2">
+        <div class="card"><strong>Buy ${esc(m.symbol)}</strong>
+          <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="buy-shares"></label>
+          <button class="btn" onclick="doTrade('buy')">Buy</button></div></div>
+        <div class="card"><strong>Sell ${esc(m.symbol)}</strong>
+          <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="sell-shares" ${holding ? `max="${holding.shares}"` : ""}></label>
+          <button class="btn secondary" onclick="doTrade('sell')">Sell</button></div>
+          ${holding ? `<p class="subtitle">You hold ${holding.shares.toFixed(4)} shares (avg cost ${money(holding.avg_cost)})</p>` : ""}
+        </div>
+      </div>
+    ` : `<div class="alert info">This market is ${esc(m.status)} right now, so trading is paused.</div>`) :
+      `<div class="alert info"><a href="login.html">Log in</a> or <a href="register.html">sign up</a> to trade ${esc(m.symbol)}.</div>`}
+
+    ${isOwner ? `
+      <h2>Creator controls</h2>
+      <div class="card">
+        <div class="chip-row">
+          ${m.status === 'active' ? `<button class="btn secondary" onclick="creatorAction('freeze')">Freeze market</button>`
+                                   : `<button class="btn secondary" onclick="creatorAction('unfreeze')">Unfreeze market</button>`}
+        </div>
+        <h3>Redeem your equity</h3>
+        <p class="subtitle">You can redeem up to 25% of your current equity stake per transaction (safety limit).</p>
+        <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="redeem-shares"></label>
+          <button class="btn" onclick="redeemEquity()">Redeem</button></div>
+      </div>
+    ` : ""}
+
+    ${Auth.isLoggedIn() ? `
+      <h2>Risk Recovery</h2>
+      <div class="card" id="risk-card">Loading…</div>
+    ` : ""}
+
+    <h2>Discussion</h2>
+    <div class="chat-box" id="chat-box">Loading…</div>
+    ${Auth.isLoggedIn() ? `
+      <div class="chat-post-row"><input type="text" id="chat-input" maxlength="280" placeholder="Say something about ${esc(m.symbol)}…">
+      <button class="btn" onclick="postChat()">Post</button></div>
+    ` : `<p class="subtitle"><a href="login.html">Log in</a> to join the discussion.</p>`}
+  `;
+
+  loadMarketChart(document.getElementById("chart"), m.symbol);
+  loadChat();
+  if (Auth.isLoggedIn()) renderRiskCard(tag);
+}
+
+function renderRiskCard(tag) {
+  const el = document.getElementById("risk-card");
+  if (!el) return;
+  if (tag && tag.active && tag.symbol === symbol) {
+    el.innerHTML = `You've tagged <strong>${symbol}</strong> ${tag.eligible ? "(eligible now)" : `(eligible in ~${Math.ceil(tag.eligible_in_minutes)} min)`}.
+      <div class="chip-row" style="margin-top:0.6rem;"><button class="btn secondary small" onclick="untagMarket()">Remove tag</button></div>`;
+  } else if (tag && tag.active) {
+    el.innerHTML = `You already have an active tag on <strong>${esc(tag.symbol)}</strong>. Only one tag at a time.`;
+  } else {
+    el.innerHTML = `Tag this market to be eligible for a share of the recovery pool if it has a verified crash later.
+      <div class="chip-row" style="margin-top:0.6rem;"><button class="btn small" onclick="tagMarket()">Tag ${symbol}</button></div>`;
+  }
+}
+
+async function tagMarket() {
+  try { await Api.post(`/api/risk/tag/${symbol}`); render(); } catch (e) { alert(e.message); }
+}
+async function untagMarket() {
+  try { await Api.post(`/api/risk/untag`); render(); } catch (e) { alert(e.message); }
+}
+
+async function doTrade(side) {
+  const errEl = document.getElementById("trade-error"), okEl = document.getElementById("trade-success");
+  clearError(errEl); okEl.classList.add("hidden");
+  const shares = parseFloat(document.getElementById(side + "-shares").value);
+  try {
+    const result = await Api.post(`/api/markets/${symbol}/${side}`, { shares });
+    okEl.textContent = `${side === 'buy' ? 'Bought' : 'Sold'} ${result.shares} shares @ ${money(result.price)}.`;
+    okEl.classList.remove("hidden");
+    render();
+  } catch (e) { showError(errEl, e); }
+}
+
+async function creatorAction(action) {
+  try { await Api.post(`/api/markets/${symbol}/${action}`); render(); } catch (e) { alert(e.message); }
+}
+
+async function redeemEquity() {
+  const errEl = document.getElementById("trade-error");
+  clearError(errEl);
+  const shares = parseFloat(document.getElementById("redeem-shares").value);
+  try {
+    const result = await Api.post(`/api/markets/${symbol}/redeem-equity`, { shares });
+    alert(`Redeemed ${result.shares} shares for ${money(result.total)} MWD.`);
+    render();
+  } catch (e) { showError(errEl, e); }
+}
+
+async function loadChat() {
+  const box = document.getElementById("chat-box");
+  try {
+    const msgs = await Api.get(`/api/chat/market:${symbol}`);
+    box.innerHTML = msgs.map(m => `<div class="chat-msg"><span class="who">${esc(m.username)}:</span> ${esc(m.body)}</div>`).join("") || "No messages yet, be the first!";
+    box.scrollTop = box.scrollHeight;
+  } catch (e) { box.innerHTML = "Couldn't load discussion."; }
+}
+
+async function postChat() {
+  const input = document.getElementById("chat-input");
+  const body = input.value.trim();
+  if (!body) return;
+  try {
+    await Api.post(`/api/chat/market:${symbol}`, { body });
+    input.value = "";
+    loadChat();
+  } catch (e) { alert(e.message); }
+}
+
+render();
+</script>
+</body>
+</html>

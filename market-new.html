@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launch a market | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow">
+  <h1>Launch a creator-market</h1>
+  <p class="lede">You'll start owning 20% of it as creator equity, which grows in value as the market does. You can redeem part of your equity later (capped per transaction), see <a href="about.html">how the economy works</a>.</p>
+  <div id="error" class="alert error hidden"></div>
+  <form class="stacked" id="new-form">
+    <label>Symbol (2-8 letters/numbers)<input type="text" id="symbol" maxlength="8" required style="text-transform:uppercase;"></label>
+    <label>Name<input type="text" id="name" maxlength="80" required></label>
+    <label>Description<textarea id="description"></textarea></label>
+    <label>Starting price<input type="number" id="price" step="0.01" min="0.05" max="10000" value="10"></label>
+    <button class="btn" type="submit">Launch it</button>
+  </form>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+document.getElementById("new-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("error");
+  clearError(errEl);
+  try {
+    const m = await Api.post("/api/markets/new", {
+      symbol: document.getElementById("symbol").value.trim(),
+      name: document.getElementById("name").value.trim(),
+      description: document.getElementById("description").value.trim(),
+      starting_price: parseFloat(document.getElementById("price").value),
+    });
+    window.location.href = `market.html?symbol=${esc(m.symbol)}`;
+  } catch (err) { showError(errEl, err); }
+});
+</script>
+</body>
+</html>

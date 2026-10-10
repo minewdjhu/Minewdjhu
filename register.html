@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign up | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow">
+  <h1>Create your account</h1>
+  <p class="subtitle">Just a username and a 6-digit PIN, no email needed.</p>
+  <div id="error" class="alert error hidden"></div>
+  <form class="stacked" id="register-form">
+    <label>Username (3-20 chars: letters, numbers, underscore)<input type="text" id="username" required autofocus></label>
+    <label>6-digit PIN (you'll need this to log in, don't lose it)<input type="password" id="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label>
+    <label>Confirm PIN<input type="password" id="pin2" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label>
+    <button class="btn" type="submit">Sign up</button>
+  </form>
+  <p class="subtitle">Already have an account? <a href="login.html">Log in</a>.</p>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+document.getElementById("register-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("error");
+  clearError(errEl);
+  const pin = document.getElementById("pin").value.trim();
+  const pin2 = document.getElementById("pin2").value.trim();
+  if (pin !== pin2) { showError(errEl, new Error("PINs don't match.")); return; }
+  try {
+    const data = await Api.post("/api/auth/register", {
+      username: document.getElementById("username").value.trim(), pin,
+    });
+    Auth.setSession(data.token, data.username, data.is_admin);
+    window.location.href = "index.html";
+  } catch (err) { showError(errEl, err); }
+});
+</script>
+</body>
+</html>
