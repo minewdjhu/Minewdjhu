@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Events</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("events.html");
+
+function render() {
+  const content = document.getElementById("admin-content");
+  content.innerHTML = `
+    <div class="card-row">
+      <h2 style="margin-top:0;">Launch an event</h2>
+      <button class="btn danger" onclick="endAll()">End all events</button>
+    </div>
+    <div id="new-error" class="alert error hidden"></div>
+    <form class="stacked" id="new-form" style="max-width:520px;">
+      <label>Type
+        <select id="type">
+          <option value="market_mania">Market Mania (volatility spike)</option>
+          <option value="market_boom">Timed Boom (positive drift)</option>
+          <option value="market_crash">Timed Crash (negative drift)</option>
+          <option value="mwd_rush">MWD Rush</option>
+          <option value="breaking_news">Breaking News</option>
+          <option value="mystery">Mystery</option>
+          <option value="community_challenge">Community Challenge (progress bar)</option>
+          <option value="market_spotlight">Independent Market Spotlight</option>
+          <option value="custom">Custom (announcement only)</option>
+        </select>
+      </label>
+      <label>Title<input type="text" id="title" required maxlength="120" placeholder="MARKET MANIA"></label>
+      <label>Description<textarea id="description"></textarea></label>
+      <label>Target market symbol (blank = everything)<input type="text" id="target" style="text-transform:uppercase;"></label>
+      <label>Intensity (1.0 = normal)<input type="number" id="intensity" step="0.1" min="0.1" value="1.5"></label>
+      <label>Goal amount (challenges only)<input type="number" id="goal" step="1" min="0" value="0"></label>
+      <label>Duration in minutes<input type="number" id="duration" min="1" value="30"></label>
+      <label class="check"><input type="checkbox" id="now" checked> Start immediately</label>
+      <label>Or start in N minutes<input type="number" id="in" min="0" value="0"></label>
+      <label class="check"><input type="checkbox" id="is_test"> Test event (hidden from players and Discord)</label>
+      <label class="check"><input type="checkbox" id="is_sandbox"> Sandbox (no effect on live data)</label>
+      <button class="btn" type="submit">Launch</button>
+    </form>
+
+    <h2>All events</h2>
+    <table><thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Ends</th><th>Actions</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5">Loading…</td></tr></tbody></table>
+  `;
+  document.getElementById("new-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById("new-error");
+    clearError(errEl);
+    try {
+      await Api.post("/api/admin/events/new", {
+        type: document.getElementById("type").value,
+        title: document.getElementById("title").value.trim(),
+        description: document.getElementById("description").value.trim(),
+        target_symbol: document.getElementById("target").value.trim(),
+        intensity: parseFloat(document.getElementById("intensity").value),
+        goal_amount: parseFloat(document.getElementById("goal").value),
+        duration_minutes: parseInt(document.getElementById("duration").value),
+        start_immediately: document.getElementById("now").checked,
+        starts_in_minutes: parseInt(document.getElementById("in").value),
+        is_test: document.getElementById("is_test").checked,
+        is_sandbox: document.getElementById("is_sandbox").checked,
+      });
+      loadRows();
+    } catch (err) { showError(errEl, err); }
+  });
+  loadRows();
+}
+
+async function loadRows() {
+  try {
+    const events = await Api.get("/api/admin/events");
+    document.getElementById("rows").innerHTML = events.map(e => `
+      <tr>
+        <td>${esc(e.title)}${e.is_test ? ' <span class="badge-pill">test</span>' : ''}${e.is_sandbox ? ' <span class="badge-pill">sandbox</span>' : ''}</td>
+        <td>${e.type.replace(/_/g, " ")}</td>
+        <td>${esc(e.status)}</td>
+        <td>${e.ends_at ? new Date(e.ends_at).toLocaleString() : "-"}</td>
+        <td><div class="chip-row">
+          ${e.status === "active" ? `<button class="btn small secondary" onclick="act(${e.id},'end')">End now</button>` : ""}
+          ${e.status === "active" && e.type === "community_challenge" ? `<button class="btn small" onclick="setProgress(${e.id}, ${e.progress_amount}, ${e.goal_amount})">Set progress</button>` : ""}
+          ${e.status === "scheduled" ? `<button class="btn small danger" onclick="act(${e.id},'cancel')">Cancel</button>` : ""}
+        </div></td>
+      </tr>`).join("") || `<tr><td colspan="5">No events yet.</td></tr>`;
+  } catch (e) { document.getElementById("rows").innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; }
+}
+async function act(id, what) {
+  try { await Api.post(`/api/admin/events/${id}/${what}`); loadRows(); } catch (e) { alert(e.message); }
+}
+async function setProgress(id, current, goal) {
+  const v = prompt(`Progress amount (goal is ${goal}):`, current);
+  if (v === null) return;
+  try { await Api.post(`/api/admin/events/${id}/progress`, { progress_amount: parseFloat(v) }); loadRows(); }
+  catch (e) { alert(e.message); }
+}
+async function endAll() {
+  if (!confirm("End ALL active events right now?")) return;
+  try { const r = await Api.post("/api/admin/events/end-all"); alert(`Ended ${r.ended} event(s).`); loadRows(); }
+  catch (e) { alert(e.message); }
+}
+render();
+</script>
+</body>
+</html>

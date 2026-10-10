@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Markets</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("markets.html");
+
+async function load() {
+  const content = document.getElementById("admin-content");
+  content.innerHTML = `
+    <h2 style="margin-top:0;">New market</h2>
+    <div id="new-error" class="alert error hidden"></div>
+    <form class="stacked" id="new-form">
+      <label>Symbol<input type="text" id="symbol" maxlength="8" required style="text-transform:uppercase;"></label>
+      <label>Name<input type="text" id="name" maxlength="80" required></label>
+      <label>Description<textarea id="description"></textarea></label>
+      <label>Starting price<input type="number" id="price" step="0.01" min="0.05" value="10"></label>
+      <label>Risk level<select id="risk"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="extreme">Extreme</option></select></label>
+      <label class="chip-row" style="flex-direction:row; align-items:center;"><input type="checkbox" id="sandbox" style="width:auto;"> Sandbox (testing only, hidden from players)</label>
+      <button class="btn" type="submit">Create</button>
+    </form>
+
+    <h2>All markets</h2>
+    <table><thead><tr><th>Symbol</th><th>Name</th><th>Price</th><th>Status</th><th>Vol/Pressure</th><th>Actions</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
+  `;
+
+  document.getElementById("new-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById("new-error");
+    clearError(errEl);
+    try {
+      await Api.post("/api/admin/markets/new", {
+        symbol: document.getElementById("symbol").value.trim(),
+        name: document.getElementById("name").value.trim(),
+        description: document.getElementById("description").value.trim(),
+        starting_price: parseFloat(document.getElementById("price").value),
+        risk_level: document.getElementById("risk").value,
+        is_sandbox: document.getElementById("sandbox").checked,
+      });
+      loadRows();
+      e.target.reset();
+    } catch (err) { showError(errEl, err); }
+  });
+
+  loadRows();
+}
+
+async function loadRows() {
+  try {
+    const markets = await Api.get("/api/admin/markets");
+    document.getElementById("rows").innerHTML = markets.map(m => `
+      <tr>
+        <td class="symbol">${esc(m.symbol)}${m.is_sandbox ? ' <span class="badge-pill">sandbox</span>' : ''}${m.is_creator_market ? ' <span class="badge-pill">creator</span>' : ''}</td>
+        <td>${esc(m.name)}</td>
+        <td class="price">${money(m.price)}</td>
+        <td><span class="badge-pill status-${esc(m.status)}">${esc(m.status)}</span></td>
+        <td>${m.volatility.toFixed(2)} / ${m.pressure.toFixed(2)}</td>
+        <td>
+          <div class="chip-row">
+            <button class="btn small" onclick="shock('${esc(m.symbol)}','boom')">📈 Boom</button>
+            <button class="btn small danger" onclick="shock('${esc(m.symbol)}','crash')">📉 Crash</button>
+            ${m.status === 'active'
+              ? `<button class="btn small secondary" onclick="action('${esc(m.symbol)}','freeze')">Freeze</button>`
+              : `<button class="btn small secondary" onclick="action('${esc(m.symbol)}','release')">Release</button>`}
+            <button class="btn small secondary" onclick="action('${esc(m.symbol)}','delist')">Delist</button>
+          </div>
+        </td>
+      </tr>`).join("") || `<tr><td colspan="6">No markets yet.</td></tr>`;
+  } catch (e) { document.getElementById("rows").innerHTML = `<tr><td colspan="6">${esc(e.message)}</td></tr>`; }
+}
+
+async function shock(symbol, direction) {
+  const magnitude = prompt(`${direction === 'boom' ? 'Boom' : 'Crash'} ${symbol} by what %?`, "15");
+  if (!magnitude) return;
+  try {
+    await Api.post(`/api/admin/markets/${symbol}/${direction}`, { magnitude_pct: parseFloat(magnitude) });
+    loadRows();
+  } catch (e) { alert(e.message); }
+}
+async function action(symbol, act) {
+  try { await Api.post(`/api/admin/markets/${symbol}/${act}`); loadRows(); } catch (e) { alert(e.message); }
+}
+
+load();
+</script>
+</body>
+</html>

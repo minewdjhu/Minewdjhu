@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Creators and Badges</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("creators.html");
+const content = document.getElementById("admin-content");
+content.innerHTML = `
+  <h2 style="margin-top:0;">Log an incident</h2>
+  <p class="subtitle">Only incidents you mark as verified count toward Risky Creator status. Bad ratings never do.</p>
+  <form class="stacked" id="inc-form">
+    <label>Market symbol<input type="text" id="inc-symbol" required style="text-transform:uppercase;"></label>
+    <label>Severity<select id="inc-sev"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+    <label>What happened<textarea id="inc-desc" required></textarea></label>
+    <button class="btn" type="submit">Log incident</button>
+  </form>
+
+  <h2>Incidents</h2>
+  <table><thead><tr><th>Market</th><th>Severity</th><th>Description</th><th>Verified</th><th>Actions</th></tr></thead>
+    <tbody id="incidents"><tr><td colspan="5">Loading…</td></tr></tbody></table>
+
+  <h2>Process a risk event</h2>
+  <p class="subtitle">Pays the recovery pool to eligible tagged players. Atomic: it all happens or none of it does. Safe to run twice, nobody is paid twice.</p>
+  <form class="stacked" id="risk-form">
+    <label>Market symbol<input type="text" id="risk-symbol" required style="text-transform:uppercase;"></label>
+    <label>Observed loss percent<input type="number" id="risk-loss" step="0.1" min="0" max="100" required></label>
+    <button class="btn danger" type="submit">Process risk event</button>
+  </form>
+
+  <h2>Risky creator flag (manual override)</h2>
+  <form class="stacked" id="flag-form">
+    <label>Username<input type="text" id="flag-user" required></label>
+    <label>Reason<input type="text" id="flag-reason"></label>
+    <div class="chip-row">
+      <button class="btn danger" type="submit">Flag</button>
+      <button class="btn secondary" type="button" onclick="unflag()">Clear flag</button>
+    </div>
+  </form>
+
+  <h2>Create a badge</h2>
+  <form class="stacked" id="badge-form">
+    <label>Key<input type="text" id="b-key" required maxlength="40"></label>
+    <label>Name<input type="text" id="b-name" required></label>
+    <label>Description<textarea id="b-desc"></textarea></label>
+    <label>Emoji<input type="text" id="b-emoji" value="🏅" maxlength="8"></label>
+    <label>Cosmetic unlock (e.g. border:gold)<input type="text" id="b-unlock"></label>
+    <label class="check"><input type="checkbox" id="b-hidden"> Hidden until earned</label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+
+  <h2>Award a badge</h2>
+  <form class="stacked" id="award-form">
+    <label>Username<input type="text" id="a-user" required></label>
+    <label>Badge key<input type="text" id="a-key" required></label>
+    <button class="btn" type="submit">Award</button>
+  </form>
+`;
+
+function onSubmit(id, handler) {
+  document.getElementById(id).addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try { await handler(); } catch (err) { alert(err.message); }
+  });
+}
+
+onSubmit("inc-form", async () => {
+  await Api.post("/api/admin/incidents/new", {
+    symbol: document.getElementById("inc-symbol").value.trim(),
+    severity: document.getElementById("inc-sev").value,
+    description: document.getElementById("inc-desc").value.trim(),
+  });
+  loadIncidents();
+});
+onSubmit("risk-form", async () => {
+  const r = await Api.post("/api/admin/risk-events/process", {
+    symbol: document.getElementById("risk-symbol").value.trim(),
+    loss_pct: parseFloat(document.getElementById("risk-loss").value),
+  });
+  alert(`Pool: ${money(r.pool)} MWD. Payouts: ${r.payouts}.`);
+});
+onSubmit("flag-form", async () => {
+  await Api.post(`/api/admin/creators/${encodeURIComponent(document.getElementById("flag-user").value.trim())}/flag`,
+    { reason: document.getElementById("flag-reason").value });
+  alert("Flagged.");
+});
+async function unflag() {
+  const u = document.getElementById("flag-user").value.trim();
+  if (!u) return alert("Enter a username first.");
+  try { await Api.post(`/api/admin/creators/${encodeURIComponent(u)}/unflag`); alert("Flag cleared."); }
+  catch (e) { alert(e.message); }
+}
+onSubmit("badge-form", async () => {
+  await Api.post("/api/admin/badges/new", {
+    key: document.getElementById("b-key").value, name: document.getElementById("b-name").value,
+    description: document.getElementById("b-desc").value, emoji: document.getElementById("b-emoji").value,
+    hidden: document.getElementById("b-hidden").checked,
+    cosmetic_unlock: document.getElementById("b-unlock").value.trim() || null,
+  });
+  alert("Badge created.");
+});
+onSubmit("award-form", async () => {
+  await Api.post("/api/admin/badges/award", {
+    username: document.getElementById("a-user").value.trim(), badge_key: document.getElementById("a-key").value.trim(),
+  });
+  alert("Awarded.");
+});
+
+async function loadIncidents() {
+  try {
+    const rows = await Api.get("/api/admin/incidents");
+    document.getElementById("incidents").innerHTML = rows.map(i => `
+      <tr><td class="symbol">${esc(i.symbol)}</td><td>${i.severity}</td><td>${esc(i.description)}</td>
+      <td>${i.verified ? "Yes" : "No"}</td>
+      <td><div class="chip-row">
+        ${i.verified ? "" : `<button class="btn small" onclick="incAct(${i.id},'verify')">Verify</button>`}
+        ${i.resolved ? "" : `<button class="btn small secondary" onclick="incAct(${i.id},'resolve')">Resolve</button>`}
+      </div></td></tr>`).join("") || `<tr><td colspan="5">No incidents logged.</td></tr>`;
+  } catch (e) { document.getElementById("incidents").innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; }
+}
+async function incAct(id, what) {
+  try { await Api.post(`/api/admin/incidents/${id}/${what}`); loadIncidents(); } catch (e) { alert(e.message); }
+}
+loadIncidents();
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | News</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("news.html");
+const content = document.getElementById("admin-content");
+content.innerHTML = `
+  <h2 style="margin-top:0;">Write news</h2>
+  <div id="error" class="alert error hidden"></div>
+  <form class="stacked" id="news-form" style="max-width:640px;">
+    <label>Title<input type="text" id="title" required maxlength="160"></label>
+    <label>Description (shown in listings)<input type="text" id="summary" maxlength="280"></label>
+    <label>Body<textarea id="body" style="min-height:180px;"></textarea></label>
+    <label>Footer<input type="text" id="footer" maxlength="200"></label>
+    <label class="check"><input type="checkbox" id="publish"> Publish immediately (also announces on Discord)</label>
+    <button class="btn" type="submit">Save</button>
+  </form>
+  <h2>All articles</h2>
+  <table><thead><tr><th>Title</th><th>Status</th><th>Published</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="4">Loading…</td></tr></tbody></table>
+`;
+document.getElementById("news-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("error");
+  clearError(errEl);
+  try {
+    await Api.post("/api/admin/news/new", {
+      title: document.getElementById("title").value.trim(),
+      summary: document.getElementById("summary").value.trim(),
+      body: document.getElementById("body").value,
+      footer: document.getElementById("footer").value.trim(),
+      publish_now: document.getElementById("publish").checked,
+    });
+    e.target.reset();
+    loadRows();
+  } catch (err) { showError(errEl, err); }
+});
+async function loadRows() {
+  try {
+    const rows = await Api.get("/api/admin/news");
+    document.getElementById("rows").innerHTML = rows.map(a => `
+      <tr><td>${esc(a.title)}</td><td>${a.is_published ? "Published" : "Draft"}</td>
+      <td>${a.published_at ? new Date(a.published_at).toLocaleDateString() : "-"}</td>
+      <td>${a.is_published ? "" : `<button class="btn small" onclick="publish(${a.id})">Publish</button>`}</td></tr>
+    `).join("") || `<tr><td colspan="4">No articles yet.</td></tr>`;
+  } catch (e) { document.getElementById("rows").innerHTML = `<tr><td colspan="4">${esc(e.message)}</td></tr>`; }
+}
+async function publish(id) {
+  try { await Api.post(`/api/admin/news/${id}/publish`); loadRows(); } catch (e) { alert(e.message); }
+}
+loadRows();
+</script>
+</body>
+</html>
