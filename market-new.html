@@ -10,20 +10,13 @@
 <div id="nav"></div>
 <main class="page narrow">
   <h1>Launch a creator-market</h1>
-  <p class="lede">Launch your own coin. You get one coin per player, and only an admin can ever remove it. Changing its name or description later costs a small fee, so choose well.</p>
+  <p class="lede">You'll start owning 20% of it as creator equity, which grows in value as the market does. You can redeem part of your equity later (capped per transaction), see <a href="about.html">how the economy works</a>.</p>
   <div id="error" class="alert error hidden"></div>
   <form class="stacked" id="new-form">
     <label>Symbol (2-8 letters/numbers)<input type="text" id="symbol" maxlength="8" required style="text-transform:uppercase;"></label>
     <label>Name<input type="text" id="name" maxlength="80" required></label>
     <label>Description<textarea id="description"></textarea></label>
     <label>Starting price<input type="number" id="price" step="0.01" min="0.05" max="10000" value="10"></label>
-    <div class="card" id="boost-card">
-      <h3 style="margin-top:0;">Your creator equity</h3>
-      <p class="small-text" id="grant-line">Loading…</p>
-      <p class="small-text">You can also <strong>add some of your own MWD</strong> as a launch boost. It becomes part of your equity, lifts the coin's starting price, and you can take it back out later. <strong>Entirely optional: leave it at 0 to launch for free.</strong></p>
-      <label>Launch boost from my wallet (MWD)<input type="number" id="deposit" min="0" step="1" value="0" oninput="preview()"></label>
-      <p class="small-text" id="preview" style="margin:.4rem 0 0;"></p>
-    </div>
     <button class="btn" type="submit">Launch it</button>
   </form>
 </main>
@@ -31,24 +24,6 @@
 <script src="js/api.js"></script>
 <script>
 Auth.requireLogin();
-let cfg = { starter_equity: 1000, max_deposit: 5000, depth: 5000 }, myBalance = 0, hasGrant = true;
-(async () => {
-  try {
-    cfg = await Api.get("/api/creator/config");
-    const me = await Api.get("/api/profile/me"); myBalance = me.balance;
-    const grantUsed = me.is_admin ? true : false;
-    document.getElementById("grant-line").innerHTML = `Your first coin comes with <strong>${money(cfg.starter_equity)} MWD of free starter equity</strong>. It counts toward how much of the coin you own, but because nobody paid for it, <strong>it can't be cashed out</strong>. Your own money (below) and the creator fee on purchases are what you can actually take out. The grant is once per player, ever.`;
-  } catch (e) {}
-  preview();
-})();
-function preview() {
-  const d = Math.max(0, parseFloat(document.getElementById("deposit").value) || 0), p = parseFloat(document.getElementById("price").value) || 0;
-  const launch = p * (1 + d / cfg.depth), box = document.getElementById("preview");
-  box.innerHTML = d > 0
-    ? `Launch price <strong>${money(launch)}</strong> (+${((launch / p - 1) * 100).toFixed(1)}% boost). Your equity starts at <strong>${money(d)}</strong> cashable${d > myBalance ? ' <span class="pct-down">(more than your wallet)</span>' : ""}, plus the locked starter grant.`
-    : `Launching free at <strong>${money(p)}</strong>. Your equity is the locked starter grant only, with nothing of yours at risk.`;
-}
-document.getElementById("price").addEventListener("input", preview);
 document.getElementById("new-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const errEl = document.getElementById("error");
@@ -59,7 +34,6 @@ document.getElementById("new-form").addEventListener("submit", async (e) => {
       name: document.getElementById("name").value.trim(),
       description: document.getElementById("description").value.trim(),
       starting_price: parseFloat(document.getElementById("price").value),
-      deposit: parseFloat(document.getElementById("deposit").value) || 0,
     });
     window.location.href = `market.html?symbol=${esc(m.symbol)}`;
   } catch (err) { showError(errEl, err); }

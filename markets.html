@@ -2,158 +2,61 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control Room | Markets</title>
+<title>Markets | Minewdjhu</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="nav"></div>
-<main class="page" id="admin-shell"></main>
-<script src="../js/config.js"></script>
-<script src="../js/api.js"></script>
-<script src="../js/admin-nav.js"></script>
+<main class="page">
+  <div class="card-row">
+    <h1>Markets</h1>
+    <a class="btn" id="new-market-btn" href="market-new.html">+ Launch a creator-market</a>
+  </div>
+  <p class="lede">Official markets are run by the Creator Control Room. Creator-markets are made by players, check the risk badge before you ape in.</p>
+
+  <h2>Official markets</h2>
+  <table><thead><tr><th>Symbol</th><th>Name</th><th>Price</th><th>Today</th><th>Risk</th><th>Health</th></tr></thead>
+    <tbody id="official-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
+
+  <h2>Creator markets</h2>
+  <table><thead><tr><th>Symbol</th><th>Name</th><th>Creator</th><th>Price</th><th>Today</th><th>Risk</th></tr></thead>
+    <tbody id="creator-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
 <script>
-renderAdminShell("markets.html");
-
 async function load() {
-  const content = document.getElementById("admin-content");
-  content.innerHTML = `
-    <h2 style="margin-top:0;">New market</h2>
-    <div id="new-error" class="alert error hidden"></div>
-    <form class="stacked" id="new-form">
-      <label>Symbol<input type="text" id="symbol" maxlength="8" required style="text-transform:uppercase;"></label>
-      <label>Name<input type="text" id="name" maxlength="80" required></label>
-      <label>Description<textarea id="description"></textarea></label>
-      <label>Starting price<input type="number" id="price" step="0.01" min="0.05" value="10"></label>
-      <label>Risk level<select id="risk"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="extreme">Extreme</option></select></label>
-      <label class="chip-row" style="flex-direction:row; align-items:center;"><input type="checkbox" id="sandbox" style="width:auto;"> Sandbox (testing only, hidden from players)</label>
-      <button class="btn" type="submit">Create</button>
-    </form>
-
-
-    <dialog id="lim-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:520px;width:92vw;">
-      <h3 style="margin-top:0;" id="lim-title">Limits</h3>
-      <p class="small-text">Optional. Leave a box empty for "no limit". The per-update limits apply to the market's own random movement. Manual Boom/Crash and news effects ignore them but still respect the price range.</p>
-      <div class="form-grid"><label>Lowest price<input type="number" id="lim-floor" step="0.01" min="0"></label><label>Highest price<input type="number" id="lim-ceil" step="0.01" min="0"></label>
-        <label>Most it can RISE per update (%)<input type="number" id="lim-up" step="0.1" min="0"></label><label>Most it can FALL per update (%)<input type="number" id="lim-down" step="0.1" min="0"></label></div>
-      <div class="chip-row" style="margin-top:1rem;"><button class="btn" onclick="saveLimits()">Save</button><button class="btn secondary" onclick="document.getElementById('lim-dlg').close()">Cancel</button></div></dialog>
-    <dialog id="prj-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:560px;width:92vw;">
-      <h3 style="margin-top:0;" id="prj-title">Project stock</h3>
-      <p class="small-text">While locked, the price barely moves: it hugs the baseline inside a tight band, and players see a clear 🔒 tag with a warning. When the project is decided: <strong>Launched</strong> unlocks it with a boom for everyone holding it; <strong>Special delete</strong> closes it and only returns a fraction of what holders put in; <strong>Unlock</strong> just makes it a normal market again. Progress updates are due on the 1st of each month.</p>
-      <div class="form-grid"><label style="grid-column:1/-1;">Project name<input id="prj-name" maxlength="80"></label><label style="grid-column:1/-1;">What players see<input id="prj-note" maxlength="300"></label>
-        <label>Progress %<input type="number" id="prj-progress" min="0" max="100" value="0"></label><label>Price band (% either side)<input type="number" id="prj-band" min="0.2" max="10" step="0.1" value="1.5"></label>
-        <label>Refund if it fails (%)<input type="number" id="prj-refund" min="0" max="100" value="25"></label><label class="check"><input type="checkbox" id="prj-announce"> Announce in Discord</label></div>
-      <div class="chip-row" style="margin-top:1rem;"><button class="btn" onclick="saveProject()">Save</button><button class="btn secondary" onclick="document.getElementById('prj-dlg').close()">Cancel</button></div></dialog>
-
-    <h2>All markets</h2>
-    <table><thead><tr><th>Symbol</th><th>Name</th><th>Price</th><th>Status</th><th>Vol/Pressure</th><th>Actions</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
-  `;
-
-  document.getElementById("new-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const errEl = document.getElementById("new-error");
-    clearError(errEl);
-    try {
-      await Api.post("/api/admin/markets/new", {
-        symbol: document.getElementById("symbol").value.trim(),
-        name: document.getElementById("name").value.trim(),
-        description: document.getElementById("description").value.trim(),
-        starting_price: parseFloat(document.getElementById("price").value),
-        risk_level: document.getElementById("risk").value,
-        is_sandbox: document.getElementById("sandbox").checked,
-      });
-      loadRows();
-      e.target.reset();
-    } catch (err) { showError(errEl, err); }
-  });
-
-  loadRows();
-}
-
-async function loadRows() {
+  if (!Auth.isLoggedIn()) document.getElementById("new-market-btn").classList.add("hidden");
   try {
-    const markets = await Api.get("/api/admin/markets");
-    window.__markets = markets;
-    document.getElementById("rows").innerHTML = markets.map(m => `
-      <tr>
-        <td class="symbol">${esc(m.symbol)}${m.is_sandbox ? ' <span class="badge-pill">sandbox</span>' : ''}${m.is_creator_market ? ' <span class="badge-pill">creator</span>' : ''}${m.project_locked ? ' <span class="badge-pill warn-risky">🔒 project</span>' : ''}</td>
-        <td>${esc(m.name)}<div class="small-text">${m.holders} holder(s)${m.max_up_pct || m.max_down_pct ? ` · limits: +${m.max_up_pct ?? "∞"}% / -${m.max_down_pct ?? "∞"}% per update` : ""}${m.price_ceiling ? ` · range ${money(m.price_floor)}-${money(m.price_ceiling)}` : ""}</div>
-          ${m.project_locked ? `<div class="small-text">🔒 <strong>${esc(m.project_title)}</strong> · ${m.project_progress}% · band ±${m.project_band_pct}% around ${money(m.project_baseline)} · failure refund ${m.project_refund_pct}%${m.project_update_due ? ' · <span class="pct-down">monthly update due</span>' : ""}</div>` : ""}</td>
+    const markets = await Api.get("/api/markets");
+    const official = markets.filter(m => !m.is_creator_market);
+    const creator = markets.filter(m => m.is_creator_market);
+
+    document.getElementById("official-rows").innerHTML = official.map(m => `
+      <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td>${esc(m.name)}</td>
         <td class="price">${money(m.price)}</td>
-        <td><span class="badge-pill status-${esc(m.status)}">${esc(m.status)}</span></td>
-        <td>${m.volatility.toFixed(2)} / ${m.pressure.toFixed(2)}</td>
-        <td>
-          <div class="chip-row">
-            ${m.project_locked ? "" : `<button class="btn small" onclick="shock('${esc(m.symbol)}','boom')">📈 Boom</button>
-            <button class="btn small danger" onclick="shock('${esc(m.symbol)}','crash')">📉 Crash</button>`}
-            ${m.status === 'active'
-              ? `<button class="btn small secondary" onclick="action('${esc(m.symbol)}','freeze')">Freeze</button>`
-              : `<button class="btn small secondary" onclick="action('${esc(m.symbol)}','release')">Release</button>`}
-            <button class="btn small secondary" onclick="action('${esc(m.symbol)}','delist')">Delist</button>
-            <button class="btn small secondary" onclick="openLimits('${esc(m.symbol)}')">Limits</button>
-            ${m.is_creator_market ? `<a class="btn small secondary" href="creatorcoins.html">Fees</a>` : ""}
-            ${m.project_locked
-              ? `<button class="btn small secondary" onclick="openProject('${esc(m.symbol)}')">Edit project</button>
-                 <button class="btn small secondary" onclick="projectProgress('${esc(m.symbol)}')">📣 Progress</button>
-                 <button class="btn small" onclick="projectSuccess('${esc(m.symbol)}')">🚀 Launched</button>
-                 <button class="btn small secondary" onclick="projectUnlock('${esc(m.symbol)}')">Unlock</button>
-                 <button class="btn small danger" onclick="projectFail('${esc(m.symbol)}')">💥 Special delete</button>`
-              : `<button class="btn small secondary" onclick="openProject('${esc(m.symbol)}')">🔒 Project lock</button>`}
-            <button class="btn small danger" onclick="removeCoin('${esc(m.symbol)}')">Remove</button>
-          </div>
-        </td>
-      </tr>`).join("") || `<tr><td colspan="6">No markets yet.</td></tr>`;
-  } catch (e) { document.getElementById("rows").innerHTML = `<tr><td colspan="6">${esc(e.message)}</td></tr>`; }
-}
+        <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
+        <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
+        <td><span class="badge-pill ${m.health}">${m.health}</span></td>
+      </tr>`).join("") || `<tr><td colspan="6">No official markets yet.</td></tr>`;
 
-async function shock(symbol, direction) {
-  const magnitude = prompt(`${direction === 'boom' ? 'Boom' : 'Crash'} ${symbol} by what %?`, "15");
-  if (!magnitude) return;
-  try {
-    await Api.post(`/api/admin/markets/${symbol}/${direction}`, { magnitude_pct: parseFloat(magnitude) });
-    loadRows();
-  } catch (e) { alert(e.message); }
+    document.getElementById("creator-rows").innerHTML = creator.map(m => `
+      <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td>${esc(m.name)}</td>
+        <td>${m.creator_username || "-"}</td>
+        <td class="price">${money(m.price)}</td>
+        <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
+        <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
+      </tr>`).join("") || `<tr><td colspan="6">No creator-markets yet, be the first!</td></tr>`;
+  } catch (e) {
+    document.getElementById("official-rows").innerHTML = `<tr><td colspan="6">Couldn't load markets: ${esc(e.message)}</td></tr>`;
+  }
 }
-async function action(symbol, act) {
-  try { await Api.post(`/api/admin/markets/${symbol}/${act}`); loadRows(); } catch (e) { alert(e.message); }
-}
-
 load();
-
-let limSym = null, prjSym = null;
-const mk = sym => (window.__markets || []).find(m => m.symbol === sym);
-const done = () => loadRows();
-function openLimits(sym) { limSym = sym; const m = mk(sym); document.getElementById("lim-title").textContent = `Limits: ${sym}`;
-  document.getElementById("lim-floor").value = m.price_floor || ""; document.getElementById("lim-ceil").value = m.price_ceiling ?? ""; document.getElementById("lim-up").value = m.max_up_pct ?? ""; document.getElementById("lim-down").value = m.max_down_pct ?? ""; document.getElementById("lim-dlg").showModal(); }
-async function saveLimits() {
-  const n = id => document.getElementById(id).value === "" ? null : parseFloat(document.getElementById(id).value);
-  try { await Api.post(`/api/admin/markets/${limSym}/limits`, { price_floor: n("lim-floor"), price_ceiling: n("lim-ceil"), max_up_pct: n("lim-up"), max_down_pct: n("lim-down") }); document.getElementById("lim-dlg").close(); done(); } catch (e) { alert(e.message); }
-}
-function openProject(sym) { prjSym = sym; const m = mk(sym); document.getElementById("prj-title").textContent = m.project_locked ? `Edit project: ${sym}` : `Lock ${sym} as a project stock`;
-  document.getElementById("prj-name").value = m.project_title || ""; document.getElementById("prj-note").value = m.project_note || ""; document.getElementById("prj-progress").value = m.project_progress || 0;
-  document.getElementById("prj-band").value = m.project_band_pct || 1.5; document.getElementById("prj-refund").value = m.project_refund_pct || 25; document.getElementById("prj-announce").checked = false; document.getElementById("prj-dlg").showModal(); }
-async function saveProject() {
-  try { await Api.post(`/api/admin/markets/${prjSym}/project/lock`, { title: document.getElementById("prj-name").value, note: document.getElementById("prj-note").value, progress: +document.getElementById("prj-progress").value,
-      band_pct: +document.getElementById("prj-band").value, refund_pct: +document.getElementById("prj-refund").value, announce: document.getElementById("prj-announce").checked }); document.getElementById("prj-dlg").close(); done(); } catch (e) { alert(e.message); }
-}
-async function projectProgress(sym) {
-  const p = prompt("New progress % (0-100):", mk(sym).project_progress); if (p === null) return; const note = prompt("Update note for players (optional):", mk(sym).project_note || "");
-  try { await Api.post(`/api/admin/markets/${sym}/project/progress`, { progress: +p, note: note || "", announce: confirm("Announce this update in Discord?") }); done(); } catch (e) { alert(e.message); }
-}
-async function projectSuccess(sym) {
-  const b = prompt(`${sym} LAUNCHED! How big should the boom be, in %? Everyone holding it gets this lift.`, "60"); if (b === null) return;
-  try { const r = await Api.post(`/api/admin/markets/${sym}/project/success`, { boom_pct: +b, announce: true }); alert(`Unlocked and boomed. New price ${money(r.new_price)}. Announced in Discord.`); done(); } catch (e) { alert(e.message); }
-}
-async function projectUnlock(sym) { if (!confirm("Just unlock it as a normal market? No boom, no announcement.")) return; try { await Api.post(`/api/admin/markets/${sym}/project/unlock`); done(); } catch (e) { alert(e.message); } }
-async function projectFail(sym) {
-  const m = mk(sym); if (!confirm(`SPECIAL DELETE ${sym}?\n\nThe project failed. Every holder gets back only ${m.project_refund_pct}% of what they originally put in, the rest is lost, and the market is closed for good. This can't be undone.`)) return;
-  try { const r = await Api.post(`/api/admin/markets/${sym}/project/fail`, { announce: true }); alert(`Closed. ${money(r.refunded_total)} MWD returned to ${r.refunded_people} holder(s) (${r.refund_pct}%).`); done(); } catch (e) { alert(e.message); }
-}
-async function removeCoin(sym) {
-  const m = mk(sym); if (!confirm(`Remove ${sym} permanently?\n\nIts ${m.holders} holder(s) are refunded at the current price first (for a creator coin, from the money actually in it). The coin then disappears from every list. This can't be undone.`)) return;
-  try { const r = await Api.post(`/api/admin/markets/${sym}/remove`); alert(`Removed. ${money(r.refunded_total)} MWD refunded to ${r.refunded_people} holder(s).`); done(); } catch (e) { alert(e.message); }
-}
 </script>
 </body>
 </html>

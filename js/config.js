@@ -1,4 +1,13 @@
 // Minewdjhu frontend: THE ONE configuration point.
-// This file is rewritten automatically by the server whenever the tunnel address changes.
-// You can also edit it by hand. Nothing else in the site contains the backend address.
-const API_BASE_URL = "https://ongoing-wing-himself-organised.trycloudflare.com";
+// ======================================================
+// This is the only place the backend's address is ever written down.
+// Every other file calls api.js, which reads this value. If your
+// Cloudflare Quick Tunnel URL changes (it will, unless you move to a
+// permanent domain later), this is the only line you need to edit. Then
+// commit the change to GitHub and GitHub Pages republishes it.
+//
+// Example once your tunnel is running:
+//   const API_BASE_URL = "https://random-words-here.trycloudflare.com";
+//
+// For local testing (backend on the same computer) leave it like this:
+const API_BASE_URL = "https://unix-reveal-tear-laboratory.trycloudflare.com";

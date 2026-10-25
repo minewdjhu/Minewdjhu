@@ -19,10 +19,6 @@
       <a class="btn" href="markets.html">Explore markets</a>
       <a class="btn secondary" href="arcade.html">Play the arcade</a>
     </div>
-    <div class="quick-links">
-      <a href="markets.html">📈 Markets</a><a href="bank.html">🏦 Bank</a><a href="casino.html">🎰 Casino</a><a href="predictions.html">🔮 Predictions</a>
-      <a href="wallet.html">👛 Wallet</a><a href="shop.html">🛍️ Shop</a><a href="events.html">🎉 Events</a><a href="players.html">👥 Players &amp; bots</a><a href="leaderboard.html">🏆 Leaderboard</a>
-    </div>
   </section>
 
   <div id="welcome-back" class="card welcome hidden"></div>
@@ -38,9 +34,6 @@
 
   <h2>📊 Biggest movers right now</h2>
   <ul id="movers" class="mover-list"><li>Loading…</li></ul>
-
-  <h2>⚡ Live trades</h2>
-  <div id="live-trades" class="card"><span class="small-text">Loading…</span></div>
 
   <h2>📰 Latest news</h2>
   <div id="news-preview" class="grid cols-3"></div>
@@ -104,14 +97,6 @@ async function load() {
   } catch (e) { /* non-fatal */ }
 }
 load();
-
-(async () => {
-  try {
-    const t = await Api.get("/api/activity");
-    document.getElementById("live-trades").innerHTML = t.length ? `<table class="tight"><tbody>${t.slice(0, 8).map(x => `<tr><td>${esc(x.username)} ${x.is_bot ? '<span class="bot-tag">🤖 bot</span>' : ""}</td>
-      <td class="${x.side === "buy" ? "pct-up" : "pct-down"}">${x.side}</td><td>${x.shares} <a href="market.html?symbol=${esc(x.symbol)}">${esc(x.symbol)}</a></td><td class="price">${money(x.price)}</td></tr>`).join("")}</tbody></table>` : `<span class="small-text">No trades yet. Be the first!</span>`;
-  } catch (e) { document.getElementById("live-trades").classList.add("hidden"); }
-})();
 </script>
 </body>
 </html>

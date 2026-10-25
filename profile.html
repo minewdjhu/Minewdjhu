@@ -33,11 +33,6 @@ async function render() {
   content.innerHTML = `
     <h1>${esc(p.display_name || p.username)} ${p.is_admin ? '<span class="badge-pill admin-link" style="border-color:var(--warn); color:var(--warn);">staff</span>' : ''} ${p.is_risky_creator ? '<span class="badge-pill warn-risky">⚠ risky creator</span>' : ''}</h1>
     ${p.title ? `<p class="subtitle">"${esc(p.title)}"</p>` : ''}
-    ${p.bot ? `<div class="card"><div class="card-row" style="margin:0;"><span><span class="bot-tag">🤖 bot</span> ${p.bot.tracked ? "A tracked bot character" : "An ambient market bot"}. Not a person, and not on the leaderboard.</span>
-        <strong class="${p.bot.profit >= 0 ? "pct-up" : "pct-down"}">${p.bot.profit >= 0 ? "+" : ""}${money(p.bot.profit)} (${p.bot.profit_pct}%) profit</strong></div>
-      ${p.bot.bio ? `<p class="subtitle" style="margin:.5rem 0 0;">${esc(p.bot.bio)}</p>` : ""}
-      <p class="small-text" style="margin:.5rem 0 .2rem;">Proficiency <strong>${p.bot.skill}/10 ${esc(p.bot.skill_label)}</strong> &middot; ${esc(p.bot.style_desc)}</p>
-      <div class="skill-bar"><i style="width:${p.bot.skill * 10}%"></i></div></div>` : ""}
     <div class="grid cols-4">
       <div class="stat-tile"><div class="label">Wallet</div><div class="value">${money(p.balance)}</div></div>
       <div class="stat-tile"><div class="label">Bank</div><div class="value">${money(p.bank_balance)}</div></div>
@@ -66,25 +61,7 @@ async function render() {
         <td class="${h.unrealized_pl >= 0 ? 'pct-up' : 'pct-down'}">${money(h.unrealized_pl)}</td></tr>
       `).join("") || `<tr><td colspan="6">No holdings yet.</td></tr>`}
       </tbody></table>
-    ${p.credit && p.credit.loans_taken ? `<p class="small-text" style="margin-top:1rem;">💳 Credit record: ${p.credit.loans_taken} loan(s), ${p.credit.paid_on_time} paid on time, ${p.credit.paid_late} late${p.credit.overdue_now ? `, <span class="pct-down">${p.credit.overdue_now} overdue now</span>` : ""}.</p>` : ""}
-    <details class="why" id="history" style="margin-top:1.2rem;">
-      <summary>📜 Trade history (latest purchases and sales)</summary>
-      <div id="history-body" class="small-text" style="margin-top:.6rem;">Loading…</div>
-    </details>
   `;
-  let historyLoaded = false;
-  document.getElementById("history").addEventListener("toggle", async (ev) => {
-    if (!ev.target.open || historyLoaded) return;
-    historyLoaded = true;
-    const body = document.getElementById("history-body");
-    try {
-      const t = await Api.get(`/api/profile/${encodeURIComponent(p.username)}/history`);
-      body.innerHTML = t.length ? `<table class="tight"><thead><tr><th>When</th><th></th><th>Shares</th><th>Market</th><th>Price</th><th>Total</th><th>Result</th></tr></thead><tbody>${t.map(x => `
-        <tr><td>${new Date(x.ts + "Z").toLocaleString()}</td><td class="${x.side === "buy" ? "pct-up" : "pct-down"}">${esc(x.side)}</td><td>${x.shares}</td>
-        <td><a href="market.html?symbol=${encodeURIComponent(x.symbol)}">${esc(x.symbol)}</a></td><td class="price">${money(x.price)}</td><td class="price">${money(x.total)}</td>
-        <td>${x.side === "sell" && x.realized_pl !== null ? `<span class="${x.realized_pl >= 0 ? "pct-up" : "pct-down"}">${x.realized_pl >= 0 ? "+" : ""}${money(x.realized_pl)}</span>` : ""}</td></tr>`).join("")}</tbody></table>` : "No trades yet.";
-    } catch (e) { body.textContent = "Couldn't load the history."; historyLoaded = false; }
-  });
 }
 render();
 </script>
