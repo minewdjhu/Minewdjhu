@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Economy</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("economy.html");
+
+async function render() {
+  const content = document.getElementById("admin-content");
+  let e;
+  try { e = await Api.get("/api/admin/economy"); }
+  catch (err) { content.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; return; }
+
+  content.innerHTML = `
+    <h2 style="margin-top:0;">Emergency controls</h2>
+    <div class="card card-row">
+      <div><strong>Maintenance mode</strong>
+        <p class="subtitle" style="margin-bottom:0;">Currently ${e.maintenance_mode ? "ON" : "off"}. Use it to pause the economy while you fix something.</p></div>
+      ${e.maintenance_mode
+        ? `<button class="btn" onclick="post('/api/admin/economy/maintenance/off')">Turn off</button>`
+        : `<button class="btn danger" onclick="post('/api/admin/economy/maintenance/on')">Turn on</button>`}
+    </div>
+    <div class="card card-row">
+      <div><strong>End all events</strong><p class="subtitle" style="margin-bottom:0;">Stops every active community event immediately.</p></div>
+      <button class="btn danger" onclick="endAll()">End all</button>
+    </div>
+    <div class="card card-row">
+      <div><strong>Backup the database now</strong><p class="subtitle" style="margin-bottom:0;">Automatic backups also run on a schedule.</p></div>
+      <button class="btn secondary" onclick="backup()">Back up</button>
+    </div>
+
+    <h2>Trading settings</h2>
+    <form class="stacked" id="fee-form">
+      <label>Trading fee percent (buys and sells)<input type="number" id="fee" step="0.1" min="0" max="25" value="${e.trading_fee_pct}"></label>
+      <button class="btn" type="submit">Save</button>
+    </form>
+
+    <h2>Market speed</h2>
+    <p class="small-text">The most often a market is allowed to move, depending on how many players are online right now. Markets only move when someone looks at them, so a shorter time means they catch up sooner. Saved instantly, no restart needed.</p>
+    <div class="card"><div class="form-grid">${e.tick_settings.map(t => `<label>${esc(t.label)} (minutes)<input type="number" id="tick-${t.key}" min="1" max="1440" value="${t.minutes}"><span class="small-text">${t.customised ? "customised" : "default"} (standard is ${t.default})</span></label>`).join("")}</div>
+      <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="saveTick()">Save speed</button><button class="btn secondary" onclick="resetTick()">Back to defaults</button></div></div>
+
+    <h2>Quiz: names you've cleared</h2>
+    <p class="small-text">Quiz questions that mention a real person stay hidden until that person has said it's fine. Tick a name here once they have, and its questions switch on. ${e.quiz.live} of ${e.quiz.total} questions are live and ${e.quiz.held_back} are held back. Manage the questions themselves on the <a href="quiz.html">Quiz questions</a> page.</p>
+    <div class="card"><div class="chip-row">${e.quiz.checklist.map(n => `<label class="check"><input type="checkbox" class="qn" value="${esc(n)}" ${e.quiz.cleared.includes(n) ? "checked" : ""}> ${esc(n)}</label>`).join("")}</div>
+      <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="saveQuizNames()">Save names</button></div></div>
+
+    <h2>Safety limits (set in backend/.env)</h2>
+    <div class="grid cols-3">
+      ${Object.entries(e.safety_limits).map(([k, v]) => `<div class="stat-tile"><div class="label">${k.replace(/_/g, " ")}</div><div class="value">${v}</div></div>`).join("")}
+    </div>
+
+    <h2>Bank settings (set in backend/.env)</h2>
+    <div class="grid cols-3">
+      <div class="stat-tile"><div class="label">Default capacity</div><div class="value">${e.bank.default_capacity}</div></div>
+      <div class="stat-tile"><div class="label">Interest per day</div><div class="value">${e.bank.interest_pct_per_day}%</div></div>
+      <div class="stat-tile"><div class="label">Over capacity rule</div><div class="value">${e.bank.over_capacity_rule}</div></div>
+    </div>
+
+    <h2>World state</h2>
+    <form class="stacked" id="ws-form" style="max-width:520px;">
+      <label>Season<input type="text" id="ws-season"></label>
+      <label>Global mood<select id="ws-mood"><option>calm</option><option>optimistic</option><option>tense</option><option>chaotic</option></select></label>
+      <label>Featured market symbol<input type="text" id="ws-featured" style="text-transform:uppercase;"></label>
+      <label>Mystery text<textarea id="ws-mystery"></textarea></label>
+      <label>Creator announcement<textarea id="ws-announce"></textarea></label>
+      <button class="btn" type="submit">Update world</button>
+    </form>
+
+    <h2>Run a simulation</h2>
+    <p class="subtitle">Forces N on-demand update cycles right now. Same code path as normal play, just triggered by hand.</p>
+    <form class="stacked" id="sim-form" style="max-width:300px;">
+      <label>Cycles<input type="number" id="cycles" min="1" max="200" value="10"></label>
+      <button class="btn secondary" type="submit">Simulate</button>
+    </form>
+
+    <h2>Queued rewards</h2>
+    <table><thead><tr><th>User ID</th><th>Amount</th><th>Source</th><th>Note</th><th></th></tr></thead>
+      <tbody id="pending"><tr><td colspan="5">Loading…</td></tr></tbody></table>
+  `;
+
+  document.getElementById("fee-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try { await Api.post("/api/admin/economy/settings", { trading_fee_pct: parseFloat(document.getElementById("fee").value) }); alert("Saved."); }
+    catch (err) { alert(err.message); }
+  });
+  document.getElementById("ws-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      await Api.post("/api/admin/world-state", {
+        season: document.getElementById("ws-season").value,
+        global_mood: document.getElementById("ws-mood").value,
+        featured_symbol: document.getElementById("ws-featured").value,
+        mystery_text: document.getElementById("ws-mystery").value,
+        creator_announcement: document.getElementById("ws-announce").value,
+      });
+      alert("World updated.");
+    } catch (err) { alert(err.message); }
+  });
+  document.getElementById("sim-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try { await Api.post("/api/admin/economy/simulate", { cycles: parseInt(document.getElementById("cycles").value) }); alert("Done."); }
+    catch (err) { alert(err.message); }
+  });
+  loadPending();
+}
+
+async function post(path) { try { await Api.post(path); render(); } catch (e) { alert(e.message); } }
+async function endAll() {
+  if (!confirm("End ALL active events?")) return;
+  try { const r = await Api.post("/api/admin/events/end-all"); alert(`Ended ${r.ended}.`); } catch (e) { alert(e.message); }
+}
+async function backup() {
+  try { const r = await Api.post("/api/admin/economy/backup-now"); alert(r.ok ? "Backup saved." : "Backup failed."); }
+  catch (e) { alert(e.message); }
+}
+async function loadPending() {
+  try {
+    const rows = await Api.get("/api/admin/pending-rewards");
+    document.getElementById("pending").innerHTML = rows.map(r => `
+      <tr><td>${r.user_id}</td><td class="price">${money(r.amount)}</td><td>${esc(r.source)}</td><td>${esc(r.note || "")}</td>
+      <td><button class="btn small" onclick="applyReward(${r.id})">Apply anyway</button></td></tr>
+    `).join("") || `<tr><td colspan="5">Nothing queued.</td></tr>`;
+  } catch (e) { document.getElementById("pending").innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; }
+}
+async function applyReward(id) {
+  try { await Api.post(`/api/admin/pending-rewards/${id}/apply`); loadPending(); } catch (e) { alert(e.message); }
+}
+render();
+
+async function saveTick() {
+  const v = k => parseInt(document.getElementById("tick-" + k).value, 10);
+  try { await Api.post("/api/admin/economy/tick", { tick_minutes_1_2: v("tick_minutes_1_2"), tick_minutes_3_5: v("tick_minutes_3_5"), tick_minutes_6_11: v("tick_minutes_6_11"), tick_minutes_12_plus: v("tick_minutes_12_plus") }); render(); } catch (e) { alert(e.message); }
+}
+async function resetTick() { if (confirm("Go back to the default speeds?")) post("/api/admin/economy/tick/reset"); }
+async function saveQuizNames() {
+  try { const r = await Api.post("/api/admin/economy/quiz-names", { names: [...document.querySelectorAll(".qn:checked")].map(x => x.value) }); alert(`Saved. ${r.live} of ${r.total} questions are live.`); render(); } catch (e) { alert(e.message); }
+}
+</script>
+</body>
+</html>
