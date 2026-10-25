@@ -20,10 +20,11 @@ async function load() {
     const d = await Api.get("/api/admin/dashboard");
     content.innerHTML = `
       <div class="grid cols-4">
-        <div class="stat-tile"><div class="label">Players</div><div class="value">${d.user_count}</div></div>
+        <div class="stat-tile"><div class="label">Players (real people)</div><div class="value">${d.user_count}</div><div class="small-text">+ ${d.bot_count} bots, counted separately</div></div>
         <div class="stat-tile"><div class="label">Markets</div><div class="value">${d.market_count}</div></div>
         <div class="stat-tile"><div class="label">Creator markets</div><div class="value">${d.creator_market_count}</div></div>
-        <div class="stat-tile"><div class="label">Wallet circulation</div><div class="value">${money(d.total_wallet_circulation)}</div></div>
+        <div class="stat-tile"><div class="label">Human cash in wallets</div><div class="value">${money(d.human_wallet_circulation)}</div></div>
+        <div class="stat-tile"><div class="label">Bot cash (simulated, recirculating)</div><div class="value">${money(d.bot_wallet_circulation)}</div><div class="small-text">${money(d.bot_cash_injected)} ever handed to bots</div></div>
       </div>
       <div class="grid cols-4" style="margin-top:0.6rem;">
         <div class="stat-tile"><div class="label">Active events</div><div class="value">${d.active_events}</div></div>

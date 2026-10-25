@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Quiz questions</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("quiz.html");
+document.getElementById("admin-content").innerHTML = `
+  <h2 style="margin-top:0;">Quiz questions</h2>
+  <p class="small-text">Every question in the arcade quiz lives here. Add your own, edit questions and their answers, switch any question in or out of the random pick, or delete it. Questions that mention a real person's name stay hidden until you clear that name on the Economy page.</p>
+  <div id="error" class="alert error hidden"></div><div id="ok" class="alert success hidden"></div>
+  <div id="stats" class="grid cols-4"></div>
+  <div class="chip-row" style="margin:.8rem 0;"><button class="btn" onclick="openQ()">+ Add a question</button><button class="btn secondary" onclick="restoreDefaults()">Restore built-in questions</button></div>
+  <div class="form-grid" style="margin-bottom:.8rem;"><label>Search<input id="f-q" oninput="draw(true)" placeholder="Search questions…"></label>
+    <label>Topic<select id="f-cat" onchange="draw(true)"></select></label>
+    <label>Show<select id="f-status" onchange="draw(true)"><option value="">Everything</option><option value="live">In the random pick</option><option value="off">Switched off</option><option value="held">Held back (names)</option><option value="custom">My own</option></select></label></div>
+  <div id="list"></div><div class="chip-row" style="margin-top:.6rem;"><button class="btn secondary hidden" id="more" onclick="shown += 50; draw()">Show more</button></div>
+
+  <dialog id="q-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:640px;width:94vw;">
+    <h3 style="margin-top:0;" id="q-title">Question</h3>
+    <div class="form-grid"><label style="grid-column:1/-1;">Question<textarea id="q-text" rows="2" maxlength="300"></textarea></label>
+      <label>Type<select id="q-kind" onchange="kindChange()"><option value="mc">Multiple choice</option><option value="not">Which is NOT…</option><option value="tf">True or false</option></select></label>
+      <label>Topic<input id="q-cat" list="cats" maxlength="40" value="Custom"><datalist id="cats"></datalist></label>
+      <label>Difficulty<select id="q-diff"><option>Easy</option><option>Medium</option><option>Hard</option></select></label></div>
+    <div id="q-opts" style="margin-top:.6rem;"></div>
+    <label style="margin-top:.6rem;">Explanation shown after answering (optional)<input id="q-expl" maxlength="300"></label>
+    <label class="check" style="margin-top:.6rem;"><input type="checkbox" id="q-active" checked> In the random pick</label>
+    <div class="chip-row" style="margin-top:1rem;"><button class="btn" onclick="saveQ()">Save</button><button class="btn secondary" onclick="document.getElementById('q-dlg').close()">Cancel</button></div></dialog>`;
+const $ = id => document.getElementById(id);
+const say = m => { const o = $("ok"); o.textContent = m; o.classList.remove("hidden"); setTimeout(() => o.classList.add("hidden"), 5000); };
+let all = [], editing = null, shown = 50;
+function statusOf(q) { return q.held_back_for.length ? "held" : q.is_active ? "live" : "off"; }
+function draw(reset) {
+  if (reset) shown = 50;
+  const text = $("f-q").value.toLowerCase(), cat = $("f-cat").value, st = $("f-status").value;
+  const rows = all.filter(q => (!text || q.question.toLowerCase().includes(text) || q.options.some(o => o.toLowerCase().includes(text))) && (!cat || q.category === cat)
+    && (!st || (st === "custom" ? q.is_custom : st === "held" ? q.held_back_for.length : st === "off" ? !q.is_active : (q.is_active && !q.held_back_for.length))));
+  $("list").innerHTML = rows.slice(0, shown).map(q => `<details class="why" style="margin-bottom:.4rem;"><summary><strong>${esc(q.question)}</strong>
+      <span class="badge-pill">${esc(q.category)}</span> <span class="badge-pill">${q.kind === "tf" ? "T/F" : q.kind === "not" ? "NOT" : "MC"}</span> ${q.is_custom ? '<span class="badge-pill">mine</span>' : ""}
+      ${q.held_back_for.length ? `<span class="badge-pill warn-risky">held back: ${esc(q.held_back_for.join(", "))}</span>` : q.is_active ? '<span class="badge-pill">in the pick</span>' : '<span class="badge-pill">off</span>'}</summary>
+      <ul style="margin:.5rem 0 .3rem 1.2rem;padding:0;">${q.options.map((o, i) => `<li ${i === q.answer_index ? 'class="pct-up"' : ""}>${esc(o)}${i === q.answer_index ? " ✔" : ""}</li>`).join("")}</ul>
+      ${q.explanation ? `<p class="small-text">${esc(q.explanation)}</p>` : ""}<div class="chip-row"><button class="btn small secondary" onclick="openQ(${q.id})">Edit</button>
+      <button class="btn small secondary" onclick="toggleQ(${q.id}, ${!q.is_active})">${q.is_active ? "Take out of the pick" : "Put in the pick"}</button><button class="btn small danger" onclick="delQ(${q.id})">Delete</button></div></details>`).join("") || "<p class='small-text'>No questions match.</p>";
+  $("more").classList.toggle("hidden", rows.length <= shown);
+}
+function optRows(opts, ans, kind) {
+  if (kind === "tf") { $("q-opts").innerHTML = `<label class="check"><input type="radio" name="ans" value="0" ${ans === 0 ? "checked" : ""}> True is correct</label> <label class="check"><input type="radio" name="ans" value="1" ${ans === 1 ? "checked" : ""}> False is correct</label>`; return; }
+  const n = Math.max(4, opts.length); $("q-opts").innerHTML = `<div class="small-text" style="margin-bottom:.3rem;">Answers: tick the correct one. Leave extras empty (2 to 6).</div>` + Array.from({ length: 6 }, (_, i) =>
+    `<div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.3rem;"><input type="radio" name="ans" value="${i}" ${i === ans ? "checked" : ""}><input id="o-${i}" maxlength="100" value="${esc(opts[i] || "")}" style="flex:1;" placeholder="Answer ${i + 1}"></div>`).join("");
+}
+function kindChange() { const k = $("q-kind").value; optRows(k === "tf" ? [] : ["", "", "", ""], 0, k); }
+function openQ(id) {
+  editing = all.find(q => q.id === id) || null; const q = editing || { question: "", kind: "mc", category: "Custom", difficulty: "Easy", options: ["", "", "", ""], answer_index: 0, explanation: "", is_active: true };
+  $("q-title").textContent = editing ? "Edit question" : "Add a question"; $("q-text").value = q.question; $("q-kind").value = q.kind; $("q-cat").value = q.category; $("q-diff").value = q.difficulty; $("q-expl").value = q.explanation; $("q-active").checked = q.is_active;
+  optRows(q.options, q.answer_index, q.kind); $("q-dlg").showModal();
+}
+async function saveQ() {
+  clearError($("error")); const kind = $("q-kind").value, ans = +(document.querySelector("input[name=ans]:checked") || { value: 0 }).value;
+  let options = kind === "tf" ? ["True", "False"] : [0, 1, 2, 3, 4, 5].map(i => $(`o-${i}`).value.trim());
+  let answer = ans;
+  if (kind !== "tf") { const kept = []; options.forEach((o, i) => { if (o) kept.push([o, i]); }); answer = kept.findIndex(([, i]) => i === ans); options = kept.map(([o]) => o); if (answer < 0) { showError($("error"), { message: "Tick which answer is the correct one (and make sure it isn't empty)." }); return; } }
+  const body = { question: $("q-text").value, options, answer_index: answer, category: $("q-cat").value, difficulty: $("q-diff").value, kind, explanation: $("q-expl").value, is_active: $("q-active").checked };
+  try { await Api.post(editing ? `/api/admin/quiz/${editing.id}/edit` : "/api/admin/quiz/new", body); $("q-dlg").close(); say("Saved."); load(); } catch (e) { showError($("error"), e); }
+}
+async function toggleQ(id, active) { try { await Api.post(`/api/admin/quiz/${id}/toggle`, { active }); load(); } catch (e) { showError($("error"), e); } }
+async function delQ(id) { if (!confirm("Delete this question for good?")) return; try { await Api.post(`/api/admin/quiz/${id}/delete`); load(); } catch (e) { showError($("error"), e); } }
+async function restoreDefaults() { try { const r = await Api.post("/api/admin/quiz/restore-defaults"); say(`${r.added} built-in question(s) added back.`); load(); } catch (e) { showError($("error"), e); } }
+async function load() {
+  try {
+    const d = await Api.get("/api/admin/quiz"); all = d.questions;
+    $("stats").innerHTML = [["Questions", d.stats.total], ["In the random pick", d.stats.live], ["Held back (names)", d.stats.held_back], ["Switched off", d.stats.switched_off]].map(([l, v]) => `<div class="stat-tile"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
+    const cur = $("f-cat").value; $("f-cat").innerHTML = `<option value="">All topics</option>` + d.categories.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join(""); $("cats").innerHTML = d.categories.map(c => `<option value="${esc(c)}">`).join("");
+    draw();
+  } catch (e) { showError($("error"), e); }
+}
+load();
+</script></body></html>

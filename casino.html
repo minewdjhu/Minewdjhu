@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casino | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>🎰 Casino</h1>
+  <p class="lede">Blackjack, scratch cards, slots and roulette, played with your <strong>wallet balance only</strong>. It's all MWD, it's all for fun, and every round is logged. Your bank and your shares are never touched.</p>
+  <div id="status" class="grid cols-3"></div>
+  <div id="error" class="alert error hidden"></div>
+  <div class="tabs" id="tabs"></div>
+
+  <section id="tab-blackjack">
+    <div class="card"><h3 style="margin-top:0;">Blackjack</h3>
+      <p class="small-text">Beat the dealer without going over 21. Blackjack pays 3 to 2. Dealer stands on every 17. You can double down on your first two cards.</p>
+      <div class="trade-form"><input type="number" id="bj-bet" min="1" step="1" value="10"><button class="btn" id="bj-deal" onclick="bjDeal()">Deal</button></div>
+      <div id="bj-table" style="margin-top:1rem;"></div>
+      <div class="trade-form" id="bj-actions" style="display:none;"><button class="btn" onclick="bjAct('hit')">Hit</button><button class="btn secondary" onclick="bjAct('stand')">Stand</button><button class="btn secondary" id="bj-double" onclick="bjAct('double')">Double down</button></div>
+      <div id="bj-msg" style="margin-top:.6rem;"></div></div>
+  </section>
+
+  <section id="tab-scratch" class="hidden">
+    <div class="card"><h3 style="margin-top:0;">Scratch cards</h3>
+      <p class="small-text">Scratch the squares. <strong>Match three of the same symbol</strong> and win that symbol's multiple of the card price. Bought a card and walked away? It waits for you below.</p>
+      <div id="sc-tiers" class="trade-form"></div>
+      <div id="sc-card"></div><div id="sc-msg"></div>
+      <div id="sc-pending"></div></div>
+  </section>
+
+  <section id="tab-slots" class="hidden">
+    <div class="card"><h3 style="margin-top:0;">Slots</h3>
+      <p class="small-text">Three of a kind pays big, and so do two cherries (you get your bet back). See the paytable under Odds.</p>
+      <div id="reels" style="margin:.6rem 0;"><span class="reel">❔</span><span class="reel">❔</span><span class="reel">❔</span></div>
+      <div class="trade-form"><input type="number" id="sl-bet" min="1" step="1" value="10"><button class="btn" onclick="spinSlots()">Spin</button></div><div id="sl-msg" style="margin-top:.6rem;"></div></div>
+  </section>
+
+  <section id="tab-roulette" class="hidden">
+    <div class="card"><h3 style="margin-top:0;">Roulette</h3>
+      <p class="small-text">European wheel, one zero. Red/black, odd/even and low/high pay 1 to 1. Dozens pay 2 to 1. A single number pays 35 to 1. Zero beats everything except a bet on zero.</p>
+      <div class="form-grid"><label>Bet on<select id="rl-type" onchange="rlType()">
+        <option value="red">Red</option><option value="black">Black</option><option value="odd">Odd</option><option value="even">Even</option><option value="low">Low (1-18)</option><option value="high">High (19-36)</option>
+        <option value="dozen">A dozen</option><option value="number">A single number</option></select></label>
+        <label id="rl-val-wrap" class="hidden">Which<input type="number" id="rl-val" min="0" max="36" value="1"></label>
+        <label>Amount<input type="number" id="rl-bet" min="1" step="1" value="10"></label><button class="btn" onclick="spinRoulette()">Spin</button></div>
+      <div id="rl-msg" style="margin-top:.8rem;"></div><div id="rl-hist" style="margin-top:.6rem;"></div></div>
+  </section>
+
+  <section id="tab-coinflip" class="hidden"><div class="card"><h3 style="margin-top:0;">Coin flip</h3>
+    <p class="small-text">Call it. A win pays 1.96x your bet.</p>
+    <div class="trade-form"><input type="number" id="cf-bet" min="1" step="1" value="10"><button class="btn" onclick="coinflip('heads')">Heads</button><button class="btn secondary" onclick="coinflip('tails')">Tails</button></div><div id="cf-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-dice" class="hidden"><div class="card"><h3 style="margin-top:0;">Dice</h3>
+    <p class="small-text">A number from 0.00 to 99.99 is rolled. Bet that it lands over or under your number: the rarer your win, the more it pays.</p>
+    <div class="form-grid"><label>Bet<input type="number" id="dc-bet" min="1" step="1" value="10"></label>
+      <label>Roll<select id="dc-mode" onchange="diceInfo()"><option value="under">Under</option><option value="over">Over</option></select></label>
+      <label>Your number<input type="number" id="dc-target" min="2" max="98" step="0.5" value="50" oninput="diceInfo()"></label><button class="btn" onclick="rollDice()">Roll</button></div>
+    <p class="small-text" id="dc-info" style="margin:.5rem 0 0;"></p><div id="dc-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-crash" class="hidden"><div class="card"><h3 style="margin-top:0;">Crash</h3>
+    <p class="small-text">Pick the multiplier you want to cash out at. If the game doesn't crash before it, you win your bet times that number. Higher targets pay more and happen less.</p>
+    <div class="form-grid"><label>Bet<input type="number" id="cr-bet" min="1" step="1" value="10"></label><label>Cash out at (x)<input type="number" id="cr-target" min="1.01" max="1000" step="0.01" value="2" oninput="crashInfo()"></label><button class="btn" onclick="playCrash()">Launch</button></div>
+    <p class="small-text" id="cr-info" style="margin:.5rem 0 0;"></p><div id="cr-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-plinko" class="hidden"><div class="card"><h3 style="margin-top:0;">Plinko</h3>
+    <p class="small-text">A ball drops through 8 rows of pegs. Where it lands sets your multiplier. Higher risk means bigger edges and a lower middle.</p>
+    <div class="form-grid"><label>Bet<input type="number" id="pl-bet" min="1" step="1" value="10"></label><label>Risk<select id="pl-risk" onchange="drawPlinko()"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label><button class="btn" onclick="dropPlinko()">Drop</button></div>
+    <div id="pl-slots" style="margin-top:.8rem;"></div><div id="pl-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-keno" class="hidden"><div class="card"><h3 style="margin-top:0;">Keno</h3>
+    <p class="small-text">Pick 1 to 4 numbers. 10 of the 40 are drawn. The more of yours that come up, the more it pays.</p>
+    <div id="kn-grid" style="display:grid;grid-template-columns:repeat(10,38px);gap:5px;margin:.6rem 0;"></div>
+    <div class="trade-form"><input type="number" id="kn-bet" min="1" step="1" value="10"><button class="btn" onclick="playKeno()">Draw</button><button class="btn secondary" onclick="kenoPicks=[];drawKeno()">Clear</button></div>
+    <p class="small-text" id="kn-info" style="margin:.5rem 0 0;"></p><div id="kn-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-mines" class="hidden"><div class="card"><h3 style="margin-top:0;">Mines</h3>
+    <p class="small-text">A 5 by 5 grid hides some mines. Open safe tiles to raise your multiplier and cash out whenever you like. Hit a mine and the bet is gone.</p>
+    <div class="form-grid" id="mn-start"><label>Bet<input type="number" id="mn-bet" min="1" step="1" value="10"></label><label>Mines<input type="number" id="mn-count" min="1" max="10" value="3"></label><button class="btn" onclick="minesStart()">Start</button></div>
+    <div id="mn-board" style="margin-top:.8rem;"></div><div id="mn-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-poker" class="hidden"><div class="card"><h3 style="margin-top:0;">Video poker (Jacks or Better)</h3>
+    <p class="small-text">Deal, tap the cards you want to keep, then draw once. A pair of jacks or better pays back your bet; better hands pay more.</p>
+    <div class="trade-form"><input type="number" id="pk-bet" min="1" step="1" value="10"><button class="btn" id="pk-deal" onclick="pokerDeal()">Deal</button><button class="btn secondary" id="pk-draw" onclick="pokerDraw()" style="display:none;">Draw</button></div>
+    <div id="pk-hand" style="margin-top:.8rem;"></div><div id="pk-msg" style="margin-top:.6rem;"></div></div></section>
+
+  <section id="tab-odds" class="hidden"><div class="card" id="odds">Loading…</div></section>
+
+  <h2>🎲 On the floor right now</h2>
+  <p class="subtitle">The latest rounds at the tables. <span class="bot-tag">🤖 bot</span> players are simulated, using their own cash, so the floor is never empty.</p>
+  <div id="floor" class="card"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+const TABS = [["blackjack", "Blackjack"], ["poker", "Video poker"], ["mines", "Mines"], ["crash", "Crash"], ["dice", "Dice"], ["plinko", "Plinko"], ["keno", "Keno"], ["coinflip", "Coin flip"], ["scratch", "Scratch cards"], ["slots", "Slots"], ["roulette", "Roulette"], ["odds", "Odds & fair play"]];
+let state = null, tab = "blackjack", sc = null, labels = {};
+const errEl = () => document.getElementById("error");
+const say = (id, html) => document.getElementById(id).innerHTML = html;
+const net = n => `<span class="${n >= 0 ? "pct-up" : "pct-down"}">${n >= 0 ? "+" : ""}${money(n)} MWD</span>`;
+
+function drawTabs() {
+  document.getElementById("tabs").innerHTML = TABS.map(([k, l]) => {
+    const off = state && k !== "odds" && !(state.config.games[k] && state.config.enabled);
+    return `<button class="${k === tab ? "active" : ""}" onclick="setTab('${k}')">${l}${off ? " (closed)" : ""}</button>`;
+  }).join("");
+  TABS.forEach(([k]) => document.getElementById(`tab-${k}`).classList.toggle("hidden", k !== tab));
+  if (tab === "odds") loadOdds();
+}
+function setTab(k) { tab = k; clearError(errEl()); drawTabs(); }
+
+function drawStatus() {
+  const c = state.config, lim = c.daily_loss_limit;
+  say("status", `
+    <div class="stat-tile"><div class="label">Wallet</div><div class="value">${money(state.balance)}</div></div>
+    <div class="stat-tile"><div class="label">Max bet</div><div class="value">${money(c.max_bet)}</div>${c.max_payout ? `<div class="small-text">Biggest single payout ${money(c.max_payout)}</div>` : ""}</div>
+    <div class="stat-tile"><div class="label">Today in the casino</div><div class="value">${net(state.today_net)}</div>${lim ? `<div class="small-text">Daily loss limit ${money(lim)}</div>` : ""}</div>`);
+  if (!c.enabled) say("status", document.getElementById("status").innerHTML + `<div class="alert info" style="grid-column:1/-1;">The casino is closed right now.</div>`);
+}
+function drawFloor() {
+  say("floor", state.floor.length ? `<table class="tight"><tbody>${state.floor.map(f => `<tr><td>${esc(f.username)} ${f.is_bot ? '<span class="bot-tag">🤖 bot</span>' : ""}</td><td>${esc(f.game)}</td><td class="price">${money(f.bet)}</td><td>${net(f.net)}</td></tr>`).join("")}</tbody></table>` : "Quiet at the tables. Be the first!");
+}
+function drawHistory() {
+  say("rl-hist", state.roulette_history.length ? `<span class="small-text">Recent numbers: </span>` + state.roulette_history.map(h => `<span class="rn ${h.colour}">${h.number}</span>`).join("") : "");
+}
+async function refresh() {
+  try { state = await Api.get("/api/casino"); labels = state.labels; drawStatus(); drawFloor(); drawHistory(); drawTabs(); drawBj(state.blackjack); drawScratchTiers(); drawPending(); if (state.mines) drawMines(state.mines); if (state.poker && !pkHand.length) drawPoker(state.poker.hand); }
+  catch (e) { showError(errEl(), e); }
+}
+
+// ---------------- blackjack ----------------
+const cardHtml = c => c === "??" ? `<span class="playing-card back">?</span>` : `<span class="playing-card ${/[♥♦]/.test(c) ? "red" : ""}">${esc(c)}</span>`;
+function drawBj(h) {
+  const active = h && h.status === "active";
+  document.getElementById("bj-actions").style.display = active ? "flex" : "none";
+  document.getElementById("bj-deal").disabled = !!active;
+  if (!h) { say("bj-table", ""); return; }
+  document.getElementById("bj-double").style.display = h.can_double ? "" : "none";
+  say("bj-table", `<div class="small-text">Dealer ${h.dealer_value !== null ? `(${h.dealer_value})` : ""}</div><div>${h.dealer.map(cardHtml).join("")}</div>
+    <div class="small-text">You (${h.player_value})</div><div>${h.player.map(cardHtml).join("")}</div>`);
+  const out = { win: "You win!", blackjack: "Blackjack! Pays 3 to 2.", push: "Push. Your bet comes back.", lose: "Dealer wins.", bust: "Bust.", dealer_blackjack: "Dealer has blackjack." }[h.outcome];
+  say("bj-msg", active ? `<span class="small-text">Bet ${money(h.bet)}${h.doubled ? " (doubled)" : ""}. Your move.</span>` : out ? `<strong>${out}</strong> ${net(h.payout - h.bet * (h.doubled ? 2 : 1))}` : "");
+}
+async function bjDeal() { clearError(errEl()); try { const r = await Api.post("/api/casino/blackjack/deal", { bet: parseFloat(document.getElementById("bj-bet").value) }); drawBj(r.hand); refresh(); } catch (e) { showError(errEl(), e); } }
+async function bjAct(a) { clearError(errEl()); try { const r = await Api.post("/api/casino/blackjack/action", { action: a }); drawBj(r.hand); refresh(); } catch (e) { showError(errEl(), e); } }
+
+// ---------------- scratch cards ----------------
+function drawScratchTiers() {
+  say("sc-tiers", state.scratch_tiers.map(t => `<button class="btn secondary" onclick="buyCard('${t.key}')">${esc(t.label)} · ${money(t.price)} MWD</button>`).join(""));
+}
+function drawPending() {
+  const p = state.unrevealed.filter(c => !sc || c.card_id !== sc.id);
+  say("sc-pending", p.length ? `<h4>Unscratched cards</h4>` + p.map(c => `<button class="btn secondary" onclick='openCard(${JSON.stringify(c)})'>${esc(c.label)} (${money(c.price)})</button> `).join("") : "");
+}
+function openCard(c) { sc = { id: c.card_id, grid: c.grid, opened: new Set(), done: false, label: c.label, price: c.price }; say("sc-msg", ""); drawCard(); drawPending(); }
+async function buyCard(tier) { clearError(errEl()); try { const r = await Api.post("/api/casino/scratch/buy", { tier }); openCard({ card_id: r.card_id, grid: r.grid, label: r.label, price: r.price }); refresh(); } catch (e) { showError(errEl(), e); } }
+function drawCard(win) {
+  if (!sc) { say("sc-card", ""); return; }
+  const winSym = win ? sc.grid.find(s => sc.grid.filter(x => x === s).length === 3) : null;
+  say("sc-card", `<div class="small-text">${esc(sc.label)}: match three of a kind</div><div class="scratch-grid">${sc.grid.map((s, i) =>
+    `<div class="scratch-cell ${sc.opened.has(i) ? "open" : ""} ${win && s === winSym ? "win" : ""}" onclick="scratchCell(${i})">${s}</div>`).join("")}</div>
+    ${sc.done ? "" : `<button class="btn secondary" onclick="scratchAll()">Reveal all</button>`}`);
+}
+function scratchCell(i) { if (!sc || sc.done) return; sc.opened.add(i); drawCard(); if (sc.opened.size === 9) finishCard(); }
+function scratchAll() { if (!sc) return; for (let i = 0; i < 9; i++) sc.opened.add(i); finishCard(); }
+async function finishCard() {
+  if (sc.done) return; sc.done = true; drawCard();
+  try {
+    const r = await Api.post(`/api/casino/scratch/${sc.id}/reveal`);
+    drawCard(r.prize > 0);
+    say("sc-msg", r.prize > 0 ? `<strong>You won ${money(r.prize)} MWD!</strong> ${net(r.net)}` : `<strong>No match this time.</strong> ${net(r.net)}`);
+    refresh();
+  } catch (e) { showError(errEl(), e); }
+}
+
+// ---------------- slots ----------------
+async function spinSlots() {
+  clearError(errEl());
+  try {
+    const r = await Api.post("/api/casino/slots/spin", { bet: parseFloat(document.getElementById("sl-bet").value) });
+    say("reels", r.reels.map(s => `<span class="reel">${s}</span>`).join(""));
+    say("sl-msg", r.multiple ? `<strong>x${r.multiple}!</strong> ${net(r.net)}` : `No win. ${net(r.net)}`);
+    refresh();
+  } catch (e) { showError(errEl(), e); }
+}
+
+// ---------------- roulette ----------------
+function rlType() {
+  const t = document.getElementById("rl-type").value, w = document.getElementById("rl-val-wrap"), v = document.getElementById("rl-val");
+  w.classList.toggle("hidden", !(t === "dozen" || t === "number"));
+  v.min = t === "dozen" ? 1 : 0; v.max = t === "dozen" ? 3 : 36; v.value = t === "dozen" ? 1 : 7;
+}
+async function spinRoulette() {
+  clearError(errEl());
+  const type = document.getElementById("rl-type").value, val = (type === "dozen" || type === "number") ? parseInt(document.getElementById("rl-val").value, 10) : null;
+  try {
+    const r = await Api.post("/api/casino/roulette/spin", { bet_type: type, value: val, bet: parseFloat(document.getElementById("rl-bet").value) });
+    say("rl-msg", `The ball landed on <span class="rn ${r.colour}">${r.number}</span> ${r.win ? "<strong>You win!</strong>" : "No win."} ${net(r.net)}`);
+    refresh();
+  } catch (e) { showError(errEl(), e); }
+}
+
+
+// ---------------- the quick games ----------------
+async function quick(path, body, show) { clearError(errEl()); try { const r = await Api.post(path, body); show(r); refresh(); } catch (e) { showError(errEl(), e); } }
+const resultLine = r => r.win ? `<strong class="pct-up">You win ${money(r.payout)} MWD!</strong> ${net(r.net)}` : `No win. ${net(r.net)}`;
+
+function coinflip(side) { quick("/api/casino/coinflip", { bet: +document.getElementById("cf-bet").value, side }, r => say("cf-msg", `It landed <strong>${r.result}</strong>. ${resultLine(r)}`)); }
+
+function diceInfo() {
+  const mode = document.getElementById("dc-mode").value, t = +document.getElementById("dc-target").value;
+  const chance = mode === "under" ? t : 100 - t;
+  say("dc-info", chance >= 2 && chance <= 95 ? `Win chance <strong>${chance.toFixed(2)}%</strong>, pays <strong>${(97 / chance).toFixed(2)}x</strong>.` : "Pick a number that gives a 2% to 95% chance.");
+}
+function rollDice() { quick("/api/casino/dice", { bet: +document.getElementById("dc-bet").value, mode: document.getElementById("dc-mode").value, target: +document.getElementById("dc-target").value }, r => say("dc-msg", `Rolled <strong>${r.roll.toFixed(2)}</strong>. ${resultLine(r)}`)); }
+
+function crashInfo() { const t = +document.getElementById("cr-target").value; say("cr-info", t >= 1.01 ? `Chance to reach it: <strong>${(97 / t).toFixed(1)}%</strong>. Pays <strong>${t.toFixed(2)}x</strong>.` : ""); }
+function playCrash() { quick("/api/casino/crash", { bet: +document.getElementById("cr-bet").value, target: +document.getElementById("cr-target").value }, r => say("cr-msg", `It crashed at <strong>${r.crash_point.toFixed(2)}x</strong> (you wanted ${r.target.toFixed(2)}x). ${resultLine(r)}`)); }
+
+const PLINKO = { low: [5.6, 2, 1.1, 1, 0.5, 1, 1.1, 2, 5.6], medium: [12, 3, 1.3, 0.7, 0.4, 0.7, 1.3, 3, 12], high: [26, 4, 1.5, 0.3, 0.2, 0.3, 1.5, 4, 26] };
+function drawPlinko(hit) {
+  const t = PLINKO[document.getElementById("pl-risk").value];
+  say("pl-slots", t.map((m, i) => `<span class="rn ${i === hit ? "green" : "black"}" style="min-width:46px;${i === hit ? "outline:3px solid var(--amber);" : ""}">${m}x</span>`).join(""));
+}
+function dropPlinko() { quick("/api/casino/plinko", { bet: +document.getElementById("pl-bet").value, risk: document.getElementById("pl-risk").value }, r => { drawPlinko(r.slot); say("pl-msg", `It landed on <strong>${r.multiplier}x</strong>. ${resultLine(r)}`); }); }
+
+let kenoPicks = [];
+function drawKeno(drawn = [], hits = []) {
+  document.getElementById("kn-grid").innerHTML = Array.from({ length: 40 }, (_, i) => i + 1).map(n => {
+    const picked = kenoPicks.includes(n), isDrawn = drawn.includes(n);
+    return `<button class="rn ${isDrawn && picked ? "green" : isDrawn ? "red" : "black"}" style="border:0;cursor:pointer;height:38px;${picked ? "outline:3px solid var(--amber);" : ""}" onclick="pickKeno(${n})">${n}</button>`;
+  }).join("");
+  say("kn-info", kenoPicks.length ? `You picked ${kenoPicks.length}: ${kenoPicks.join(", ")}` : "Tap up to 4 numbers.");
+}
+function pickKeno(n) { kenoPicks = kenoPicks.includes(n) ? kenoPicks.filter(x => x !== n) : (kenoPicks.length < 4 ? [...kenoPicks, n] : kenoPicks); drawKeno(); }
+function playKeno() { quick("/api/casino/keno", { bet: +document.getElementById("kn-bet").value, picks: kenoPicks }, r => { drawKeno(r.drawn, r.hits); say("kn-msg", `${r.hits.length} of your numbers came up${r.multiplier ? ` (${r.multiplier}x)` : ""}. ${resultLine(r)}`); }); }
+
+function drawMines(g, extra) {
+  const start = document.getElementById("mn-start"), board = document.getElementById("mn-board");
+  start.style.display = g && !(extra && extra.done) ? "none" : "";
+  if (!g) { board.innerHTML = ""; return; }
+  const open = g.revealed || [], bombs = (extra && extra.mine_positions) || [];
+  board.innerHTML = `<div style="display:grid;grid-template-columns:repeat(5,54px);gap:6px;">${Array.from({ length: 25 }, (_, i) => {
+    const o = open.includes(i), b = bombs.includes(i), done = extra && extra.done;
+    return `<button class="rn ${b ? "red" : o ? "green" : "black"}" style="border:0;height:54px;font-size:1.4rem;cursor:${o || done ? "default" : "pointer"};" ${o || done ? "disabled" : ""} onclick="minesReveal(${i})">${b ? "💣" : o ? "💎" : "?"}</button>`;
+  }).join("")}</div>
+    ${extra && extra.done ? "" : `<p class="small-text" style="margin:.6rem 0;">Multiplier <strong>${g.multiplier}x</strong>${g.next_multiplier ? ` · next tile ${g.next_multiplier}x` : ""} · cash out now: <strong>${money(g.cashout)}</strong></p>
+    <button class="btn" onclick="minesCash()" ${open.length ? "" : "disabled"}>Cash out</button>`}`;
+}
+function minesStart() { quick("/api/casino/mines/start", { bet: +document.getElementById("mn-bet").value, mines: +document.getElementById("mn-count").value }, r => { say("mn-msg", ""); drawMines(r.game); }); }
+function minesReveal(tile) { quick("/api/casino/mines/reveal", { tile }, r => { drawMines(r, r); if (r.done) say("mn-msg", r.outcome === "boom" ? `<strong class="pct-down">Boom!</strong> You lost your bet.` : `<strong class="pct-up">You win ${money(r.payout)} MWD!</strong> ${net(r.net)}`); }); }
+function minesCash() { quick("/api/casino/mines/cashout", {}, r => { drawMines(r, r); say("mn-msg", `<strong class="pct-up">Cashed out ${money(r.payout)} MWD!</strong> ${net(r.net)}`); }); }
+
+let pkHold = [false, false, false, false, false], pkHand = [];
+function drawPoker(hand, done) {
+  pkHand = hand || [];
+  document.getElementById("pk-deal").style.display = pkHand.length && !done ? "none" : "";
+  document.getElementById("pk-draw").style.display = pkHand.length && !done ? "" : "none";
+  document.getElementById("pk-hand").innerHTML = pkHand.map((c, i) => `<span style="display:inline-block;text-align:center;margin-right:6px;cursor:${done ? "default" : "pointer"};" ${done ? "" : `onclick="pkToggle(${i})"`}>${cardHtml(c)}<div class="small-text">${!done && pkHold[i] ? "HELD" : "&nbsp;"}</div></span>`).join("");
+}
+function pkToggle(i) { pkHold[i] = !pkHold[i]; drawPoker(pkHand); }
+function pokerDeal() { pkHold = [false, false, false, false, false]; say("pk-msg", ""); quick("/api/casino/poker/deal", { bet: +document.getElementById("pk-bet").value }, r => drawPoker(r.hand)); }
+function pokerDraw() { quick("/api/casino/poker/draw", { holds: pkHold }, r => { drawPoker(r.hand, true); say("pk-msg", r.multiplier ? `<strong class="pct-up">${esc(r.result)}: ${r.multiplier}x.</strong> ${net(r.net)}` : `No winning hand. ${net(r.net)}`); }); }
+
+// ---------------- odds ----------------
+async function loadOdds() {
+  const o = await Api.get("/api/casino/odds");
+  say("odds", `<h3 style="margin-top:0;">Odds & fair play</h3>
+    <p class="small-text">Every outcome is decided on the server using a secure random source, not in your browser. Every finished round is logged, and the Control Room compares the real results with these published odds. "Return to player" is how much of every MWD staked comes back, on average, over many rounds.</p>
+    <h4>Blackjack</h4><ul>${o.blackjack.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+    <h4>Scratch cards (return to player ${o.scratch.rtp_pct}%)</h4><p class="small-text">${esc(o.scratch.how)}</p>
+    <table class="tight"><thead><tr><th>Match three</th><th>Pays</th><th>Chance</th></tr></thead><tbody>${o.scratch.wins.map(w => `<tr><td>${w.symbol}${w.symbol}${w.symbol}</td><td>x${w.multiple} the price</td><td>${w.chance_pct}%</td></tr>`).join("")}</tbody></table>
+    <h4>Slots (return to player ${o.slots.rtp_pct}%)</h4>
+    <table class="tight"><thead><tr><th>Line</th><th>Pays</th></tr></thead><tbody>${o.slots.three.map(w => `<tr><td>${w.symbol}${w.symbol}${w.symbol}</td><td>x${w.multiple} your bet</td></tr>`).join("")}<tr><td>Exactly two 🍒</td><td>x${o.slots.two_cherries} (bet back)</td></tr></tbody></table>
+    <h4>Roulette (return to player ${o.roulette.rtp_pct}%)</h4><p class="small-text">${esc(o.roulette.wheel)}. ${Object.entries(o.roulette.payouts).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(" · ")}</p>
+    <h4>More games</h4>
+    <p class="small-text"><strong>Coin flip</strong> (${o.coinflip.rtp_pct}% return): ${esc(o.coinflip.how)}<br><strong>Dice</strong> (${o.dice.rtp_pct}%): ${esc(o.dice.how)}<br><strong>Crash</strong> (${o.crash.rtp_pct}%): ${esc(o.crash.how)}<br>
+    <strong>Mines</strong> (${o.mines.rtp_pct}%): ${esc(o.mines.how)}<br><strong>Plinko</strong>: ${esc(o.plinko.how)} Return: ${Object.entries(o.plinko.rtp_pct).map(([k, v]) => `${k} ${v}%`).join(", ")}.<br>
+    <strong>Keno</strong>: ${esc(o.keno.how)} Return by picks: ${Object.entries(o.keno.rtp_pct).map(([k, v]) => `${k} pick${k > 1 ? "s" : ""} ${v}%`).join(", ")}.<br>
+    <strong>Video poker</strong>: ${esc(o.poker.how)} Pays: ${o.poker.pays.map(p => `${esc(p.hand)} ${p.multiple}x`).join(", ")}. Return: ${esc(String(o.poker.rtp_pct))}.</p>
+    <p class="small-text">${esc(o.max_payout)}</p>
+    <p class="small-text">Limits protect everyone: the admin can set a maximum bet and a daily loss limit, and can close any game at any time.</p>`);
+}
+drawTabs(); refresh();
+setInterval(() => { if (document.visibilityState === "visible" && !document.activeElement.matches("input")) refresh(); }, 30000);
+</script>
+</body></html>

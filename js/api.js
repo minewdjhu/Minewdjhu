@@ -11,7 +11,6 @@ const Auth = {
   TOKEN_KEY: "mwd_token",
   USERNAME_KEY: "mwd_username",
   IS_ADMIN_KEY: "mwd_is_admin",
-  BALANCE_KEY: "mwd_balance",
 
   getToken() { return localStorage.getItem(this.TOKEN_KEY); },
   getUsername() { return localStorage.getItem(this.USERNAME_KEY); },
@@ -22,14 +21,12 @@ const Auth = {
     localStorage.setItem(this.TOKEN_KEY, token);
     localStorage.setItem(this.USERNAME_KEY, username);
     localStorage.setItem(this.IS_ADMIN_KEY, isAdmin ? "true" : "false");
-    localStorage.removeItem(this.BALANCE_KEY); // never show the previous player's balance
   },
 
   clearSession() {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.USERNAME_KEY);
     localStorage.removeItem(this.IS_ADMIN_KEY);
-    localStorage.removeItem(this.BALANCE_KEY);
   },
 
   requireLogin() {
@@ -87,8 +84,6 @@ const Api = {
       const message = (data && data.error) || `Request failed (${resp.status})`;
       throw new ApiError(message, resp.status);
     }
-    // Anything that can change money (trade, spin, bank...) is a POST, so re-check the balance.
-    if (method === "POST" && !path.startsWith("/api/auth/") && Auth.isLoggedIn()) scheduleBalanceRefresh();
     return data;
   },
 
@@ -143,21 +138,23 @@ function renderNav() {
   el.innerHTML = `
     <div class="nav-inner">
       <a class="brand" href="${ROOT}index.html"><span class="brand-mark">M</span><span>Minewdjhu</span></a>
-      ${loggedIn ? `<a class="nav-balance" id="nav-balance" href="${ROOT}profile.html" title="Your wallet balance">
-        <span class="nav-balance-coin" aria-hidden="true"></span>
-        <span class="nav-balance-label">Wallet</span>
-        <span class="nav-balance-value" id="nav-balance-value">${cachedBalanceText()}</span>
-      </a>` : ""}
       <button class="nav-toggle" aria-label="Menu" onclick="document.getElementById('nav').classList.toggle('open')">Menu</button>
       <nav class="mainnav">
         ${link("markets.html", "Markets")}
-        ${link("arcade.html", "Arcade")}
         ${link("bank.html", "Bank")}
+        ${link("arcade.html", "Arcade")}
+        ${link("casino.html", "Casino")}
+        ${link("predictions.html", "Predict")}
+        ${link("shop.html", "Shop")}
         ${link("events.html", "Events")}
         ${link("news.html", "News")}
-        ${link("leaderboard.html", "Leaderboard")}
-        ${link("records.html", "Records")}
-        ${link("badges.html", "Badges")}
+        ${link("players.html", "Players")}
+        <details class="nav-more"><summary>More</summary><div>
+          ${link("wallet.html", "Wallet &amp; loans")}
+          ${link("leaderboard.html", "Leaderboard")}
+          ${link("records.html", "Records")}
+          ${link("badges.html", "Badges")}
+        </div></details>
       </nav>
       <div class="nav-user">
         ${loggedIn ? `
@@ -171,54 +168,7 @@ function renderNav() {
         `}
       </div>
     </div>`;
-  if (loggedIn) { refreshBell(); refreshBalance(); startBalancePolling(); }
-}
-
-// --- Always-visible wallet balance ------------------------------------------
-function cachedBalanceText() {
-  const raw = localStorage.getItem(Auth.BALANCE_KEY);
-  const n = raw === null ? NaN : Number(raw);
-  return Number.isFinite(n) ? money(n) : "...";
-}
-
-let balanceInFlight = false;
-async function refreshBalance() {
-  const valueEl = document.getElementById("nav-balance-value");
-  if (!valueEl || !Auth.isLoggedIn() || balanceInFlight) return;
-  balanceInFlight = true;
-  try {
-    const me = await Api.get("/api/profile/me");
-    const now = Number(me.balance);
-    if (!Number.isFinite(now)) return;
-    const rawPrev = localStorage.getItem(Auth.BALANCE_KEY);
-    const prev = rawPrev === null ? NaN : Number(rawPrev);
-    valueEl.textContent = money(now);
-    localStorage.setItem(Auth.BALANCE_KEY, String(now));
-    if (Number.isFinite(prev) && Math.abs(now - prev) > 0.004) {
-      const chip = document.getElementById("nav-balance");
-      if (chip) {
-        chip.classList.remove("bal-up", "bal-down");
-        void chip.offsetWidth; // restart the flash
-        chip.classList.add(now > prev ? "bal-up" : "bal-down");
-      }
-    }
-  } catch (e) { /* the balance chip is a nicety, never block a page on it */ }
-  finally { balanceInFlight = false; }
-}
-
-let balanceTimer = null;
-function scheduleBalanceRefresh() {
-  clearTimeout(balanceTimer);
-  balanceTimer = setTimeout(refreshBalance, 400);
-}
-
-let balancePollingOn = false;
-function startBalancePolling() {
-  if (balancePollingOn) return;
-  balancePollingOn = true;
-  // Light touch: once a minute, and only while this tab is actually on screen.
-  setInterval(() => { if (document.visibilityState === "visible") refreshBalance(); }, 60000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshBalance(); });
+  if (loggedIn) refreshBell();
 }
 
 async function refreshBell() {

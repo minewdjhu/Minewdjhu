@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Players | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>👥 Players</h1>
+  <p class="lede">Everyone playing Minewdjhu. Open anyone to see their portfolio. Scroll to the bottom for the <strong>tracked bots</strong>: simulated traders you can follow.</p>
+  <input id="search" placeholder="Search players…" style="max-width:320px;margin-bottom:1rem;" oninput="draw()">
+  <div id="players">Loading…</div>
+  <h2 id="bots-title" style="margin-top:2.5rem;">🤖 Tracked bots</h2>
+  <p class="subtitle">These are bots, not people. They trade and play the casino with their own simulated cash, and they never appear on the leaderboard. Each has a <strong>proficiency</strong> from 1 to 10 that decides how well it manages risk.</p>
+  <div id="bots" class="cards-grid"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+let data = { players: [], bots: [] };
+function ago(iso) { if (!iso) return "never"; const m = Math.floor((Date.now() - new Date(iso + "Z")) / 60000); return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; }
+function draw() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const rows = data.players.map((p, i) => ({ ...p, rank: i + 1 })).filter(p => !q || p.username.toLowerCase().includes(q) || (p.display_name || "").toLowerCase().includes(q));
+  document.getElementById("players").innerHTML = `<table class="tight"><thead><tr><th>#</th><th>Player</th><th>Title</th><th>Net worth</th></tr></thead><tbody>${rows.map(p => `
+    <tr><td>${p.rank}</td><td><a href="profile.html?username=${encodeURIComponent(p.username)}"><strong>${esc(p.display_name || p.username)}</strong></a> ${p.display_name ? `<span class="small-text">@${esc(p.username)}</span>` : ""} ${p.is_risky_creator ? '<span class="badge-pill warn-risky">⚠ risky creator</span>' : ""}</td>
+    <td>${esc(p.title || "")}</td><td class="price">${money(p.net_worth)}</td></tr>`).join("") || `<tr><td colspan="4">No players match.</td></tr>`}</tbody></table>`;
+  document.getElementById("bots").innerHTML = data.bots.map(b => `
+    <div class="card item-card"><div class="card-row" style="margin:0;"><h3 style="margin:0;"><a href="profile.html?username=${encodeURIComponent(b.username)}">${esc(b.display_name || b.username)}</a></h3><span class="bot-tag">🤖 bot</span></div>
+      ${b.bio ? `<p class="subtitle" style="margin:0;">${esc(b.bio)}</p>` : ""}
+      <div class="small-text">Proficiency <strong>${b.skill}/10 ${esc(b.skill_label)}</strong></div><div class="skill-bar"><i style="width:${b.skill * 10}%"></i></div>
+      <div class="small-text">${esc(b.style_desc || b.style || "")}</div>
+      <div class="card-row" style="margin:0;"><div><div class="small-text">Net worth</div><span class="price">${money(b.net_worth)}</span></div>
+        <div style="text-align:right;"><div class="small-text">Profit</div><span class="${b.profit >= 0 ? "pct-up" : "pct-down"}">${b.profit >= 0 ? "+" : ""}${money(b.profit)} (${b.profit_pct >= 0 ? "+" : ""}${b.profit_pct}%)</span></div></div>
+      <div class="small-text">${b.trades} trades &middot; ${b.holdings} holding(s) &middot; ${b.active ? (b.on_floor ? "🟢 trading now" : "⚪ resting") : "⏸ paused"} &middot; last active ${ago(b.last_active)}</div></div>`).join("") || `<div class="card">No tracked bots yet.</div>`;
+  document.getElementById("bots-title").classList.toggle("hidden", !data.bots.length && !!q);
+}
+(async () => { try { data = await Api.get("/api/players"); draw(); } catch (e) { document.getElementById("players").innerHTML = `<div class="alert error">${esc(e.message)}</div>`; } })();
+</script></body></html>

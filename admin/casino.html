@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Casino</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("casino.html");
+document.getElementById("admin-content").innerHTML = `
+  <h2 style="margin-top:0;">Casino</h2>
+  <div id="error" class="alert error hidden"></div><div id="ok" class="alert success hidden"></div>
+  <div class="card"><h3 style="margin-top:0;">Settings</h3>
+    <div class="switch-row"><div><strong>Casino open</strong><div class="small-text">Closing it stops every game, for players and bots.</div></div><label class="check"><input type="checkbox" id="c-enabled"> Open</label></div>
+    <div class="form-grid" style="margin-top:.8rem;"><label>Maximum bet<input type="number" id="c-max" min="1" step="1"></label>
+      <label>Daily loss limit per player <span class="small-text">(0 = off)</span><input type="number" id="c-loss" min="0" step="1"></label>
+      <label>Maximum payout per round <span class="small-text">(0 = no limit)</span><input type="number" id="c-pay" min="0" step="1"></label></div>
+    <h4>Games</h4><div id="c-games" class="form-grid"></div>
+    <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="save()">Save</button></div></div>
+  <h2>Real players</h2><p class="small-text">Last 24 hours, then all time. "House net" is what players lost overall. Actual return should settle near the published one over many rounds.</p>
+  <div id="humans"></div>
+  <h2>Bots</h2><p class="small-text">Simulated players at the tables, using their own cash. Kept apart so they never muddy the real numbers.</p>
+  <div id="bots"></div>`;
+const $ = id => document.getElementById(id);
+let data = null;
+const table = (title, rows) => `<h4>${title}</h4><table class="tight"><thead><tr><th>Game</th><th>Rounds</th><th>Players</th><th>Wagered</th><th>Paid out</th><th>House net</th><th>Actual return</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r.label)}</td><td>${r.rounds}</td><td>${r.players}</td><td class="price">${money(r.wagered)}</td><td class="price">${money(r.paid_out)}</td><td class="${r.house_net >= 0 ? "pct-up" : "pct-down"}">${money(r.house_net)}</td><td>${r.actual_rtp_pct === null ? "-" : r.actual_rtp_pct + "%"}</td></tr>`).join("")}</tbody></table>`;
+async function load() {
+  try {
+    data = await Api.get("/api/admin/casino"); const c = data.config;
+    $("c-enabled").checked = c.enabled; $("c-max").value = c.max_bet; $("c-loss").value = c.daily_loss_limit; $("c-pay").value = c.max_payout;
+    $("c-games").innerHTML = Object.entries(data.labels).map(([k, l]) => `<label class="check"><input type="checkbox" id="g-${k}" ${c.games[k] ? "checked" : ""}> ${esc(l)}</label>`).join("");
+    $("humans").innerHTML = table("Last 24 hours", data.stats_24h) + table("All time", data.stats_all_time);
+    $("bots").innerHTML = table("Last 24 hours", data.bot_stats_24h);
+  } catch (e) { showError($("error"), e); }
+}
+async function save() {
+  clearError($("error"));
+  try { await Api.post("/api/admin/casino/settings", { enabled: $("c-enabled").checked, max_bet: +$("c-max").value, daily_loss_limit: +$("c-loss").value, max_payout: +$("c-pay").value,
+      games: Object.fromEntries(Object.keys(data.labels).map(k => [k, $(`g-${k}`).checked])) });
+    const o = $("ok"); o.textContent = "Saved."; o.classList.remove("hidden"); setTimeout(() => o.classList.add("hidden"), 4000); load(); } catch (e) { showError($("error"), e); }
+}
+load();
+</script></body></html>

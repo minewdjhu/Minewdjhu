@@ -21,6 +21,7 @@ const LABELS = {
   biggest_single_gain: "💰 Biggest single gain",
   biggest_market_move_pct: "🎢 Biggest market move",
   longest_login_streak: "🔥 Longest login streak",
+  casino_biggest_win: "🎰 Biggest casino win",
 };
 Api.get("/api/records").then(rows => {
   document.getElementById("records").innerHTML = rows.map(r => `

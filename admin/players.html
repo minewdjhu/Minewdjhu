@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Players & Bots</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("players.html");
+document.getElementById("admin-content").innerHTML = `
+  <h2 style="margin-top:0;">Players &amp; bots</h2>
+  <div id="error" class="alert error hidden"></div><div id="ok" class="alert success hidden"></div>
+
+  <div class="card" id="bot-controls"></div>
+
+  <div class="card"><h3 style="margin-top:0;">Add a bot</h3>
+    <p class="small-text">A <strong>tracked character</strong> has a name, a proficiency and a bio, and the public can follow its portfolio on the Players page. An <strong>ambient</strong> bot is an anonymous extra that just keeps the market lively and is never shown to the public. Both trade and play the casino with their own cash, and neither ever counts as a real player.</p>
+    <div class="form-grid">
+      <label>Name shown<input id="nb-name" maxlength="40" placeholder="e.g. Maxwell"></label>
+      <label>Username<input id="nb-user" maxlength="32" placeholder="e.g. maxwell_pro"></label>
+      <label>Style<select id="nb-style"></select></label>
+      <label>Proficiency <strong id="nb-skill-label">5</strong>/10<input type="range" id="nb-skill" min="1" max="10" value="5" oninput="skillLabel()"></label>
+      <label>Starting cash<input type="number" id="nb-cash" min="10" step="100" placeholder="default"></label>
+      <label style="grid-column: span 2;">Bio (shown on their profile)<input id="nb-bio" maxlength="200" placeholder="One line about this character"></label>
+      <label class="check"><input type="checkbox" id="nb-tracked" checked> Tracked (public can follow)</label>
+      <button class="btn" onclick="addBot()">Create bot</button>
+    </div>
+    <div class="chip-row" style="margin-top:.8rem;"><button class="btn secondary small" onclick="starterPack()">Add a starter pack of 8 ambient bots</button>
+      <button class="btn secondary small" onclick="runNow()">Run a bot cycle now (test)</button></div></div>
+
+  <h2>Players <span class="small-text" id="players-count"></span></h2>
+  <table class="tight"><thead><tr><th>Player</th><th>Wallet</th><th>Net worth</th><th>Trades</th><th>Last seen</th><th></th></tr></thead><tbody id="players-rows"></tbody></table>
+
+  <h2>🤖 Bots <span class="small-text" id="bots-count"></span></h2>
+  <label class="check" style="margin-bottom:.6rem;"><input type="checkbox" id="show-retired" onchange="load()"> Show retired bots</label>
+  <table class="tight"><thead><tr><th>Bot</th><th>Type</th><th>Style / proficiency</th><th>Cash</th><th>Net worth</th><th>Profit</th><th>Trades</th><th>State</th><th></th></tr></thead><tbody id="bots-rows"></tbody></table>
+
+  <dialog id="edit-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:520px;width:92vw;">
+    <h3 style="margin-top:0;" id="edit-title">Edit bot</h3>
+    <div class="form-grid"><label>Name shown<input id="eb-name" maxlength="40"></label><label>Style<select id="eb-style"></select></label>
+      <label>Proficiency <strong id="eb-skill-label">5</strong>/10<input type="range" id="eb-skill" min="1" max="10" oninput="document.getElementById('eb-skill-label').textContent=this.value"></label>
+      <label style="grid-column: 1/-1;">Bio<input id="eb-bio" maxlength="200"></label>
+      <label class="check"><input type="checkbox" id="eb-tracked"> Tracked (public can follow)</label></div>
+    <div class="chip-row" style="margin-top:1rem;"><button class="btn" onclick="saveEdit()">Save</button><button class="btn secondary" onclick="document.getElementById('edit-dlg').close()">Cancel</button></div>
+  </dialog>
+  <dialog id="act-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:560px;width:92vw;">
+    <h3 style="margin-top:0;" id="act-title">Recent activity</h3><div id="act-body" class="small-text"></div>
+    <div class="chip-row" style="margin-top:1rem;"><button class="btn secondary" onclick="document.getElementById('act-dlg').close()">Close</button></div>
+  </dialog>`;
+const $ = id => document.getElementById(id);
+let status = null, editId = null;
+const say = (msg) => { const o = $("ok"); o.textContent = msg; o.classList.remove("hidden"); setTimeout(() => o.classList.add("hidden"), 5000); };
+function skillLabel() { $("nb-skill-label").textContent = $("nb-skill").value; }
+const ago = iso => { if (!iso) return "never"; const m = Math.floor((Date.now() - new Date(iso + "Z")) / 60000); return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
+const skillName = s => s <= 3 ? "Novice" : s <= 6 ? "Competent" : s <= 8 ? "Expert" : "Master";
+async function call(fn) { clearError($("error")); try { await fn(); await load(); } catch (e) { showError($("error"), e); } }
+
+function drawControls() {
+  const c = status.config, cash = status.cash;
+  $("bot-controls").innerHTML = `<h3 style="margin-top:0;">Bot controls</h3>
+    <div class="grid cols-3">
+      <div class="stat-tile"><div class="label">Human cash (real players)</div><div class="value">${money(cash.human_wallet)}</div></div>
+      <div class="stat-tile"><div class="label">Bot cash (simulated)</div><div class="value">${money(cash.bot_wallet)}</div><div class="small-text">+ ${money(status.bot_portfolio_value)} in shares. ${money(cash.bot_cash_injected)} ever handed to bots.</div></div>
+      <div class="stat-tile"><div class="label">On the floor now</div><div class="value">${status.ambient.on_floor.length + status.tracked.on_floor.length}</div><div class="small-text">${status.ambient.on_floor.length} ambient, ${status.tracked.on_floor.length} tracked</div></div></div>
+    <div class="switch-row"><div><strong>Ambient bots</strong><div class="small-text">${status.ambient.enabled} of ${status.ambient.total} switched on. Anonymous extras that keep things lively.</div></div>
+      <label class="check"><input type="checkbox" id="bc-enabled" ${c.enabled ? "checked" : ""}> On</label></div>
+    <div class="switch-row"><div><strong>Tracked characters</strong><div class="small-text">${status.tracked.enabled} of ${status.tracked.total} switched on. The named bots the public can follow.</div></div>
+      <label class="check"><input type="checkbox" id="bc-tracked" ${c.tracked_enabled ? "checked" : ""}> On</label></div>
+    <div class="form-grid" style="margin-top:.8rem;">
+      <label>Most ambient bots at once<input type="number" id="bc-max" min="0" max="50" value="${c.max_active}"></label>
+      <label>Most tracked bots at once<input type="number" id="bc-tmax" min="0" max="50" value="${c.tracked_max_active}"></label>
+      <label>Minutes between bot turns<input type="number" id="bc-int" min="1" max="120" value="${c.interval_minutes}"></label>
+      <label>Starting / refill cash<input type="number" id="bc-cash" min="10" step="100" value="${c.starting_cash}"></label></div>
+    <div class="switch-row"><span>Keep going when no real player is online</span><label class="check"><input type="checkbox" id="bc-empty" ${c.run_when_empty ? "checked" : ""}> Yes</label></div>
+    <div class="switch-row"><span>Bots may invest in creator-owned coins <span class="small-text">(turn off to keep them out)</span></span><label class="check"><input type="checkbox" id="bc-creator" ${c.invest_creator ? "checked" : ""}> Yes</label></div>
+    <div class="switch-row"><span>Bots also play the casino (their own cash)</span><label class="check"><input type="checkbox" id="bc-casino" ${c.play_casino ? "checked" : ""}> Yes</label></div>
+    <div class="switch-row"><span>Let bot trades count toward market crowding <span class="small-text">(off = bots never move prices)</span></span><label class="check"><input type="checkbox" id="bc-aff" ${c.affect_prices ? "checked" : ""}> Yes</label></div>
+    <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="saveControls()">Save bot settings</button><button class="btn danger" onclick="allOff()">Switch ALL bots off</button></div>`;
+}
+async function saveControls() {
+  call(async () => { await Api.post("/api/admin/bots/settings", { enabled: $("bc-enabled").checked, max_active: +$("bc-max").value, tracked_enabled: $("bc-tracked").checked,
+    tracked_max_active: +$("bc-tmax").value, interval_minutes: +$("bc-int").value, run_when_empty: $("bc-empty").checked, starting_cash: +$("bc-cash").value,
+    affect_prices: $("bc-aff").checked, play_casino: $("bc-casino").checked, invest_creator: $("bc-creator").checked }); say("Bot settings saved."); });
+}
+function setWallet(id, name, current) {
+  const v = prompt(`Set ${name}'s wallet to exactly how many MWD? (now ${money(current)})`, Math.round(current)); if (v === null) return;
+  const reason = prompt("Why? (saved in the audit log and shown to the player)", ""); if (reason === null) return;
+  call(async () => { const r = await Api.post(`/api/admin/players/${id}/wallet`, { balance: parseFloat(v), reason }); say(`${name}: ${money(r.old)} → ${money(r.new)}`); });
+}
+function allOff() { call(async () => { await Api.post("/api/admin/bots/all-off"); say("Every bot is now off."); }); }
+function addBot() {
+  call(async () => { await Api.post("/api/admin/bots/new", { username: $("nb-user").value.trim(), display_name: $("nb-name").value.trim(), style: $("nb-style").value, skill: +$("nb-skill").value,
+    bio: $("nb-bio").value.trim(), tracked: $("nb-tracked").checked, starting_cash: $("nb-cash").value ? +$("nb-cash").value : null });
+    ["nb-name", "nb-user", "nb-bio", "nb-cash"].forEach(i => $(i).value = ""); say("Bot created."); });
+}
+function starterPack() { call(async () => { const r = await Api.post("/api/admin/bots/starter-pack"); say(`${r.created} ambient bot(s) added.`); }); }
+function runNow() { call(async () => { const r = await Api.post("/api/admin/bots/run-now"); say(`Ran one cycle: ${r.trades} bot action(s).`); }); }
+const toggle = (id, on) => call(() => Api.post(`/api/admin/bots/${id}/toggle`, { enabled: on }));
+const retire = id => confirm("Retire this bot? It stops trading and leaves the lists, but its history is kept and you can restore it.") && call(() => Api.post(`/api/admin/bots/${id}/retire`));
+const restore = id => call(() => Api.post(`/api/admin/bots/${id}/restore`));
+function openEdit(b) {
+  editId = b.id; $("edit-title").textContent = `Edit ${b.display_name || b.username}`; $("eb-name").value = b.display_name || ""; $("eb-style").value = b.style;
+  $("eb-skill").value = b.skill; $("eb-skill-label").textContent = b.skill; $("eb-bio").value = b.bio || ""; $("eb-tracked").checked = b.tracked; $("edit-dlg").showModal();
+}
+function saveEdit() { call(async () => { await Api.post(`/api/admin/bots/${editId}/edit`, { display_name: $("eb-name").value.trim(), style: $("eb-style").value, skill: +$("eb-skill").value,
+  bio: $("eb-bio").value.trim(), tracked: $("eb-tracked").checked }); $("edit-dlg").close(); say("Saved."); }); }
+async function showActivity(id, name) {
+  $("act-title").textContent = `Recent activity: ${name}`; $("act-body").textContent = "Loading…"; $("act-dlg").showModal();
+  try { const t = await Api.get(`/api/admin/players/${id}/activity`);
+    $("act-body").innerHTML = t.length ? `<table class="tight"><tbody>${t.map(x => `<tr><td class="${x.side === "buy" ? "pct-up" : "pct-down"}">${x.side}</td><td>${x.shares.toFixed(2)} ${esc(x.symbol)}</td><td class="price">${money(x.price)}</td><td>${new Date(x.ts + "Z").toLocaleString()}</td></tr>`).join("")}</tbody></table>` : "No trades yet."; }
+  catch (e) { $("act-body").textContent = e.message; }
+}
+async function load() {
+  try {
+    status = await Api.get("/api/admin/bots/status"); drawControls();
+    const styles = Object.entries(status.styles).map(([k, v]) => `<option value="${k}">${k}: ${esc(v)}</option>`).join("");
+    if (!$("nb-style").options.length) { $("nb-style").innerHTML = styles; $("eb-style").innerHTML = styles; }
+    const all = await Api.get(`/api/admin/players?include_retired=${$("show-retired").checked}`);
+    const humans = all.filter(p => !p.is_bot), bots = all.filter(p => p.is_bot);
+    $("players-count").textContent = `(${humans.length})`; $("bots-count").textContent = `(${bots.length})`;
+    $("players-rows").innerHTML = humans.map(p => `<tr><td><a href="../profile.html?username=${encodeURIComponent(p.username)}"><strong>${esc(p.display_name || p.username)}</strong></a> ${p.is_admin ? '<span class="badge-pill">admin</span>' : ""}</td>
+      <td class="price">${money(p.balance)}</td><td class="price">${money(p.net_worth)}</td><td>${p.trades}</td><td>${ago(p.last_seen_at)}</td>
+      <td><div class="chip-row"><a class="btn small secondary" href="../profile.html?username=${encodeURIComponent(p.username)}">Portfolio</a>${p.is_admin ? "" : `<button class="btn small secondary" onclick="setWallet(${p.id}, '${esc(p.username)}', ${p.balance})">Set wallet</button>`}</div></td></tr>`).join("") || `<tr><td colspan="6">No players yet.</td></tr>`;
+    $("bots-rows").innerHTML = bots.map(b => `<tr style="${b.retired ? "opacity:.5" : ""}">
+      <td><strong>${esc(b.display_name || b.username)}</strong> <span class="small-text">@${esc(b.username)}</span></td>
+      <td><span class="bot-tag">${b.tracked ? "🤖 tracked" : "🤖 ambient"}</span></td>
+      <td class="small-text">${esc(b.style)} &middot; ${b.skill}/10 ${skillName(b.skill)}</td>
+      <td class="price">${money(b.balance)}</td><td class="price">${money(b.net_worth)}</td>
+      <td><span class="${b.profit >= 0 ? "pct-up" : "pct-down"}">${b.profit >= 0 ? "+" : ""}${money(b.profit)}</span></td><td>${b.trades}</td>
+      <td>${b.retired ? "retired" : b.bot_enabled ? (b.on_floor ? "🟢 on the floor" : "⚪ resting") : "⏸ off"}</td>
+      <td><div class="chip-row">
+        ${b.retired ? `<button class="btn small" onclick="restore(${b.id})">Restore</button>` : `
+          <button class="btn small secondary" onclick="toggle(${b.id}, ${!b.bot_enabled})">${b.bot_enabled ? "Switch off" : "Switch on"}</button>
+          <button class="btn small secondary" onclick='openEdit(${JSON.stringify({ id: b.id, display_name: b.display_name, username: b.username, style: b.style, skill: b.skill, bio: b.bio, tracked: b.tracked }).replace(/'/g, "&#39;")})'>Edit</button>
+          <button class="btn small secondary" onclick="showActivity(${b.id}, '${esc(b.username)}')">Activity</button>
+          <a class="btn small secondary" href="../profile.html?username=${encodeURIComponent(b.username)}">Portfolio</a>
+          <button class="btn small secondary" onclick="setWallet(${b.id}, '${esc(b.username)}', ${b.balance})">Set wallet</button>
+          <button class="btn small danger" onclick="retire(${b.id})">Retire</button>`}</div></td></tr>`).join("") || `<tr><td colspan="9">No bots yet. Add one above.</td></tr>`;
+  } catch (e) { showError($("error"), e); }
+}
+load();
+</script></body></html>

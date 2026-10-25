@@ -3,8 +3,9 @@ function renderAdminShell(activePage) {
   if (!el) return;
   const pages = [
     ["dashboard.html", "Dashboard"], ["markets.html", "Markets"], ["events.html", "Events"],
-    ["news.html", "News"], ["economy.html", "Economy"], ["creators.html", "Creators & Badges"],
-    ["audit.html", "Audit log"],
+    ["news.html", "News"], ["predictions.html", "Predictions"], ["shop.html", "Shop"], ["casino.html", "Casino"],
+    ["players.html", "Players & Bots"], ["wallet.html", "Wallet & loans"], ["creatorcoins.html", "Creator coins"], ["quiz.html", "Quiz questions"], ["economy.html", "Economy"],
+    ["creators.html", "Creators & Badges"], ["audit.html", "Audit log"],
   ];
   el.innerHTML = `
     <h1>Creator Control Room</h1>

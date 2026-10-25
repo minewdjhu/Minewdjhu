@@ -37,8 +37,11 @@ async function load() {
         <div class="card event-card ${eventCardClass(e.type)}">
           <div class="card-row"><strong>${esc(e.title)}</strong><span class="badge-pill">${e.type.replace(/_/g," ")}</span></div>
           <p class="subtitle">${esc(e.description)}</p>
+          <p style="margin:.3rem 0;"><strong>What's happening:</strong> ${esc(e.what_it_does)}</p>
+          <p style="margin:.3rem 0;"><strong>What you can do:</strong> ${esc(e.how_to_play)}</p>
+          <p class="small-text" style="margin:.3rem 0;">${e.target_symbol ? `Affects <a href="market.html?symbol=${esc(e.target_symbol)}">${esc(e.target_symbol)}</a>` : "Affects every market"}${e.ends_at ? ` &middot; ${timeLeft(e.ends_at)}` : ""}</p>
           ${e.progress_pct !== null ? `<div class="progress-track"><div class="progress-fill" style="width:${e.progress_pct}%;"></div></div>
-            <div class="subtitle" style="margin:0.3rem 0 0;">${e.progress_pct.toFixed(1)}% of goal</div>` : ""}
+            <div class="subtitle" style="margin:0.3rem 0 0;">${e.progress_pct.toFixed(1)}% of the way there${e.goal_amount ? ` (goal: ${money(e.goal_amount)} MWD traded by everyone)` : ""}</div>` : ""}
         </div>`).join("") || "<p>Nothing active right now.</p>"}</div>
       <h2>🗓️ Scheduled</h2>
       <div class="grid cols-2">${scheduled.map(e => `

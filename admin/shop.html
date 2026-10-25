@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Shop</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("shop.html");
+document.getElementById("admin-content").innerHTML = `
+  <h2 style="margin-top:0;">Shop</h2>
+  <div id="error" class="alert error hidden"></div><div id="ok" class="alert success hidden"></div>
+  <div class="chip-row"><button class="btn" onclick="openItem()">+ Add an item</button>
+    <label class="check"><input type="checkbox" id="show-arch" onchange="load()"> Show removed items</label></div>
+  <table class="tight" style="margin-top:.8rem;"><thead><tr><th></th><th>Item</th><th>Price</th><th>Stock</th><th>Limit</th><th>Sold</th><th>Status</th><th></th></tr></thead><tbody id="items"></tbody></table>
+
+  <h2>Orders</h2>
+  <div class="trade-form"><select id="o-filter" onchange="loadOrders()"><option value="pending">Waiting for you</option><option value="fulfilled">Done</option><option value="refunded">Refunded</option><option value="all">All</option></select></div>
+  <table class="tight"><thead><tr><th>Who</th><th>Bought</th><th>Their message</th><th>Paid</th><th>When</th><th></th></tr></thead><tbody id="orders"></tbody></table>
+
+  <dialog id="it-dlg" style="border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);max-width:600px;width:94vw;">
+    <h3 style="margin-top:0;" id="it-title">Item</h3>
+    <label>Icon <span class="small-text">(emoji only, pick one or type one)</span>
+      <div style="display:flex;gap:.6rem;align-items:center;"><span id="it-preview" class="emoji" style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;"></span>
+        <input id="it-emoji" maxlength="16" style="width:90px;" oninput="emojiCheck()"><span class="small-text" id="it-emoji-msg"></span></div></label>
+    <div id="picker" style="display:flex;flex-wrap:wrap;gap:4px;margin:.5rem 0 .8rem;"></div>
+    <div class="form-grid"><label style="grid-column:1/-1;">Title<input id="it-name" maxlength="80"></label>
+      <label style="grid-column:1/-1;">Description<textarea id="it-desc" rows="3" maxlength="400"></textarea></label>
+      <label>Price (MWD)<input type="number" id="it-price" min="0" step="1"></label>
+      <label>Stock <span class="small-text">(empty = unlimited)</span><input type="number" id="it-stock" min="0" step="1"></label>
+      <label>Max per player <span class="small-text">(empty = no limit)</span><input type="number" id="it-limit" min="1" step="1"></label>
+      <label>Sort order<input type="number" id="it-sort" step="1" value="0"></label>
+      <label class="check"><input type="checkbox" id="it-note" onchange="noteToggle()"> Buyer writes a message</label>
+      <label id="it-prompt-wrap" style="grid-column:1/-1;">What to ask them<input id="it-prompt" maxlength="120" placeholder="e.g. What should it be called?"></label>
+      <label class="check"><input type="checkbox" id="it-active" checked> On sale</label></div>
+    <div class="chip-row" style="margin-top:1rem;"><button class="btn" onclick="saveItem()">Save</button><button class="btn secondary" onclick="document.getElementById('it-dlg').close()">Cancel</button></div></dialog>`;
+const $ = id => document.getElementById(id);
+const say = m => { const o = $("ok"); o.textContent = m; o.classList.remove("hidden"); setTimeout(() => o.classList.add("hidden"), 6000); };
+const EMOJI = "📣 🎤 🐴 🎮 🎬 🪦 ⚖️ 🥒 🎁 ⭐ 🏆 👑 💎 🔥 🎉 🎵 🎧 🍕 🍔 🍿 🧱 ⛏️ 🗡️ 🛡️ 🏹 🧪 🪄 🚀 🛸 🤖 👾 🎲 🃏 🕹️ 📸 🖼️ 💬 📝 🔔 💡 🌈 ❤️ 🐔 🐟 🐷 🐮 🦄 🐉".split(" ");
+$("picker").innerHTML = EMOJI.map(e => `<button type="button" class="btn small secondary" style="padding:.2rem .5rem;font-size:1.2rem;" onclick="pickEmoji('${e}')">${e}</button>`).join("");
+let items = [], editing = null;
+function isOneEmoji(v) { v = v.trim(); if (!v || !/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(v)) return false; try { return [...new Intl.Segmenter().segment(v)].length === 1 && !/[A-Za-z0-9]/.test(v); } catch (e) { return !/[A-Za-z0-9]/.test(v); } }
+function emojiCheck() { const v = $("it-emoji").value; $("it-preview").textContent = isOneEmoji(v) ? v : "?"; $("it-emoji-msg").textContent = !v || isOneEmoji(v) ? "" : "Emoji only, and just one."; }
+function pickEmoji(e) { $("it-emoji").value = e; emojiCheck(); }
+function noteToggle() { $("it-prompt-wrap").style.display = $("it-note").checked ? "" : "none"; }
+function openItem(id) {
+  editing = items.find(i => i.id === id) || null; const i = editing || { emoji: "🎁", name: "", description: "", price: 100, stock: null, per_user_limit: null, sort_order: items.length, needs_note: false, note_prompt: "", is_active: true };
+  $("it-title").textContent = editing ? `Edit ${i.name}` : "Add an item"; $("it-emoji").value = i.emoji; $("it-name").value = i.name; $("it-desc").value = i.description; $("it-price").value = i.price;
+  $("it-stock").value = i.stock ?? ""; $("it-limit").value = i.per_user_limit ?? ""; $("it-sort").value = i.sort_order; $("it-note").checked = i.needs_note; $("it-prompt").value = i.note_prompt; $("it-active").checked = i.is_active;
+  emojiCheck(); noteToggle(); $("it-dlg").showModal();
+}
+async function saveItem() {
+  clearError($("error"));
+  if (!isOneEmoji($("it-emoji").value)) { showError($("error"), { message: "The icon has to be a single emoji." }); return; }
+  const body = { name: $("it-name").value, description: $("it-desc").value, emoji: $("it-emoji").value.trim(), price: +$("it-price").value, stock: $("it-stock").value === "" ? null : +$("it-stock").value,
+    per_user_limit: $("it-limit").value === "" ? null : +$("it-limit").value, needs_note: $("it-note").checked, note_prompt: $("it-prompt").value, is_active: $("it-active").checked, sort_order: +$("it-sort").value || 0 };
+  try { await Api.post(editing ? `/api/admin/shop/items/${editing.id}/edit` : "/api/admin/shop/items/new", body); $("it-dlg").close(); say("Saved."); load(); } catch (e) { showError($("error"), e); }
+}
+async function toggle(id) { const i = items.find(x => x.id === id); try { await Api.post(`/api/admin/shop/items/${id}/edit`, { name: i.name, description: i.description, emoji: i.emoji, price: i.price, stock: i.stock, per_user_limit: i.per_user_limit, needs_note: i.needs_note, note_prompt: i.note_prompt, is_active: !i.is_active, sort_order: i.sort_order }); load(); } catch (e) { showError($("error"), e); } }
+async function remove(id) {
+  if (!confirm("Remove this item from the shop? If anyone has bought it, it's archived (hidden but kept for the order history). If not, it's deleted.")) return;
+  try { const r = await Api.post(`/api/admin/shop/items/${id}/delete`); say(r.message); load(); } catch (e) { showError($("error"), e); }
+}
+async function restore(id) { try { await Api.post(`/api/admin/shop/items/${id}/restore`); load(); } catch (e) { showError($("error"), e); } }
+async function load() {
+  try {
+    items = await Api.get(`/api/admin/shop/items?include_archived=${$("show-arch").checked}`);
+    $("items").innerHTML = items.map(i => `<tr style="${i.archived ? "opacity:.5" : ""}"><td style="font-size:1.5rem;">${esc(i.emoji)}</td><td><strong>${esc(i.name)}</strong><div class="small-text">${esc(i.description)}</div></td><td class="price">${money(i.price)}</td>
+      <td>${i.stock ?? "∞"}</td><td>${i.per_user_limit ?? "-"}</td><td>${i.sold} <span class="small-text">(${money(i.revenue)})</span></td><td>${i.archived ? "removed" : i.is_active ? "on sale" : "off"}</td>
+      <td><div class="chip-row">${i.archived ? `<button class="btn small" onclick="restore(${i.id})">Restore</button>` : `<button class="btn small secondary" onclick="openItem(${i.id})">Edit</button><button class="btn small secondary" onclick="toggle(${i.id})">${i.is_active ? "Turn off" : "Turn on"}</button><button class="btn small danger" onclick="remove(${i.id})">Remove</button>`}</div></td></tr>`).join("") || `<tr><td colspan="8">No items. Add one above.</td></tr>`;
+    loadOrders();
+  } catch (e) { showError($("error"), e); }
+}
+async function loadOrders() {
+  const rows = await Api.get(`/api/admin/shop/orders?status=${$("o-filter").value}`);
+  $("orders").innerHTML = rows.map(o => `<tr><td><strong>${esc(o.username)}</strong></td><td>${esc(o.item_name)}</td><td>${esc(o.note || "")}</td><td class="price">${money(o.price_paid)}</td><td>${new Date(o.created_at + "Z").toLocaleString()}</td>
+    <td>${o.status === "pending" ? `<div class="chip-row"><button class="btn small" onclick="fulfil(${o.id})">Done</button><button class="btn small secondary" onclick="refund(${o.id})">Refund</button></div>` : esc(o.status)}</td></tr>`).join("") || `<tr><td colspan="6">None.</td></tr>`;
+}
+async function fulfil(id) { const n = prompt("Optional note for them (e.g. 'Shouted you out in tonight's stream'):", ""); if (n === null) return; try { await Api.post(`/api/admin/shop/orders/${id}/fulfil`, { admin_note: n }); loadOrders(); } catch (e) { showError($("error"), e); } }
+async function refund(id) { if (!confirm("Refund this order? They get their MWD back and the item goes back in stock.")) return; try { await Api.post(`/api/admin/shop/orders/${id}/refund`, { admin_note: "" }); loadOrders(); load(); } catch (e) { showError($("error"), e); } }
+load();
+</script></body></html>

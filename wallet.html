@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallet | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>👛 Wallet</h1>
+  <p class="lede">Your money, your daily bonus, sending MWD to other players, and loans. Every MWD moves from one wallet to another: nothing is created.</p>
+  <div id="error" class="alert error hidden"></div><div id="ok" class="alert success hidden"></div>
+  <div id="summary" class="grid cols-4"></div>
+
+  <div class="card" id="daily-card"></div>
+
+  <details class="card" id="send-card" open>
+    <summary><strong>💸 Send money</strong> <span class="small-text" id="send-limits"></span></summary>
+    <input id="send-search" placeholder="Search players…" style="max-width:300px;margin:.8rem 0;" oninput="drawPlayers()">
+    <input id="send-note" maxlength="120" placeholder="Add a message (optional)" style="max-width:420px;margin-bottom:.6rem;">
+    <div id="send-list" style="max-height:340px;overflow:auto;"></div>
+  </details>
+
+  <h2>🤝 Loans</h2>
+  <div class="card" id="incoming-card" style="display:none;"></div>
+
+  <div class="card"><h3 style="margin-top:0;">Lend money</h3>
+    <p class="small-text">You pick the player, the amount, the interest and how long they have. The money leaves your wallet <strong>when you make the offer</strong> and is held safely until they accept (or it comes straight back if they decline, you cancel, or nobody answers in <span id="offer-hours">48</span> hours). Interest is a flat percentage of the amount.</p>
+    <div class="form-grid">
+      <label>Lend to<select id="ln-borrower" onchange="showCredit()"></select></label>
+      <label>Amount<input type="number" id="ln-amount" min="1" step="1" value="100" oninput="loanPreview()"></label>
+      <label>Interest %<input type="number" id="ln-interest" min="0" step="0.5" value="10" oninput="loanPreview()"></label>
+      <label>Days to repay<input type="number" id="ln-days" min="1" step="1" value="7"></label>
+      <button class="btn" onclick="makeOffer()">Send offer</button></div>
+    <p class="small-text" id="ln-preview" style="margin:.5rem 0 0;"></p>
+    <p class="small-text" id="ln-credit" style="margin:.2rem 0 0;"></p></div>
+
+  <h3>You owe</h3><div id="borrowed"></div>
+  <h3>You've lent</h3><div id="lent"></div>
+  <details class="why"><summary>Loan history</summary><div id="history" style="margin-top:.5rem;"></div></details>
+
+  <details class="why"><summary>How loans stay fair</summary><ul class="small-text" style="margin:.5rem 0 0 1rem;padding:0;">
+    <li>Your wallet can never go below zero. Debt is tracked separately on your record.</li>
+    <li>When a loan is overdue it's collected automatically from your wallet and bank, but <strong>you always keep at least <span id="floor">500</span> MWD</strong> to play with, and your daily bonus is yours to keep.</li>
+    <li>Collection happens before you spend, so debt can't be dodged by moving money around, and you can't send away money you owe.</li>
+    <li>Whatever can't be collected stays owing and is collected as you earn. You can't borrow again while a loan is overdue.</li>
+    <li>Everyone can see your credit record (paid on time, paid late, overdue) so lenders know who they're lending to.</li></ul></details>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+Auth.requireLogin();
+const $ = id => document.getElementById(id);
+let W = null, players = [], L = null;
+const say = m => { const o = $("ok"); o.textContent = m; o.classList.remove("hidden"); setTimeout(() => o.classList.add("hidden"), 6000); };
+const fail = e => showError($("error"), e);
+const when = iso => iso ? new Date(iso + "Z").toLocaleString() : "";
+async function act(fn) { clearError($("error")); try { await fn(); await load(); } catch (e) { fail(e); } }
+
+function drawSummary() {
+  const c = W.credit;
+  $("summary").innerHTML = `
+    <div class="stat-tile"><div class="label">Wallet</div><div class="value">${money(W.balance)}</div></div>
+    <div class="stat-tile"><div class="label">Bank</div><div class="value">${money(W.bank)}</div></div>
+    <div class="stat-tile"><div class="label">You owe</div><div class="value ${W.owed > 0 ? "pct-down" : ""}">${money(W.owed)}</div><div class="small-text">can send: ${money(W.sendable)}</div></div>
+    <div class="stat-tile"><div class="label">Credit record</div><div class="value" style="font-size:1.1rem;">${c.paid_on_time} on time · ${c.paid_late} late</div><div class="small-text">${c.overdue_now ? `<span class="pct-down">${c.overdue_now} overdue now</span>` : "nothing overdue"}</div></div>`;
+  const d = W.daily;
+  $("daily-card").innerHTML = `<div class="card-row" style="margin:0;"><div><strong>🎁 Daily bonus: ${money(d.amount)} MWD</strong><div class="small-text">${d.can_claim ? "Ready to claim. It's yours to keep, even if you owe a loan." : esc(d.reason || "")}</div></div>
+    <button class="btn" ${d.can_claim ? "" : "disabled"} onclick="act(async () => { const r = await Api.post('/api/wallet/daily'); say('Claimed ' + money(r.amount) + ' MWD.'); })">Claim</button></div>`;
+  const s = W.send;
+  $("send-limits").textContent = s.enabled ? `· sent ${money(s.sent_today)} of ${money(s.daily_cap)} today${s.fee_pct ? ` · ${s.fee_pct}% fee` : ""}` : "· switched off right now";
+  $("floor").textContent = money(W.protected_floor).replace(".00", "");
+  $("offer-hours").textContent = W.loans.offer_hours;
+}
+function drawPlayers() {
+  const q = $("send-search").value.toLowerCase();
+  const rows = players.filter(p => !q || p.username.toLowerCase().includes(q) || (p.display_name || "").toLowerCase().includes(q));
+  $("send-list").innerHTML = rows.map(p => `<div class="opt-row" style="padding:.4rem 0;"><div style="flex:1 1 160px;"><strong>${esc(p.display_name || p.username)}</strong>${p.display_name ? ` <span class="small-text">@${esc(p.username)}</span>` : ""}</div>
+    <input type="number" min="1" step="1" placeholder="Amount" id="amt-${esc(p.username)}" style="width:110px;"><button class="btn small" onclick="sendTo('${esc(p.username)}')">Send</button></div>`).join("") || "<p class='small-text'>No players match.</p>";
+}
+function sendTo(username) {
+  const v = parseFloat($(`amt-${username}`).value);
+  if (!(v > 0)) { fail({ message: "Type an amount first." }); return; }
+  if (!confirm(`Send ${money(v)} MWD to ${username}? This can't be undone.`)) return;
+  act(async () => { const r = await Api.post("/api/wallet/send", { to: username, amount: v, note: $("send-note").value }); say(`Sent ${money(r.sent)} MWD to ${r.to}.`); drawPlayers(); });
+}
+
+function loanLine(l) {
+  const bits = [`${money(l.principal)} at ${l.interest_pct}% = ${money(l.due_total)}`, `${l.days} day(s)`];
+  if (l.status === "active") bits.push(l.overdue ? `<span class="pct-down">OVERDUE since ${new Date(l.due_at + "Z").toLocaleDateString()}</span>` : `due ${new Date(l.due_at + "Z").toLocaleDateString()}`);
+  return bits.join(" · ");
+}
+function drawLoans() {
+  const inc = L.incoming;
+  $("incoming-card").style.display = inc.length ? "" : "none";
+  $("incoming-card").innerHTML = `<h3 style="margin-top:0;">Offers for you</h3>` + inc.map(l => `<div class="opt-row"><div style="flex:1 1 260px;"><strong>${esc(l.other_name)}</strong> offers ${loanLine(l)}
+      <div class="small-text">You'd get ${money(l.principal)} now and owe ${money(l.due_total)}. Offer ends ${when(l.offer_expires_at)}.</div></div>
+      <button class="btn small" onclick="act(async () => { await Api.post('/api/loans/${l.id}/accept'); say('Loan accepted. The money is in your wallet.'); })">Accept</button>
+      <button class="btn small secondary" onclick="act(() => Api.post('/api/loans/${l.id}/decline'))">Decline</button></div>`).join("");
+  $("borrowed").innerHTML = L.borrowed.map(l => `<div class="card"><div class="card-row" style="margin:0;"><div><strong>Owed to ${esc(l.other_name)}</strong><div class="small-text">${loanLine(l)}</div>
+      <div class="small-text">Paid ${money(l.paid)} · <strong>${money(l.remaining)} still owing</strong></div></div>
+      <div class="trade-form"><input type="number" min="1" step="1" id="rp-${l.id}" value="${Math.ceil(l.remaining)}" style="width:110px;"><button class="btn small" onclick="repay(${l.id})">Repay</button></div></div></div>`).join("") || `<p class="small-text">You don't owe anyone anything.</p>`;
+  $("lent").innerHTML = L.lent.map(l => `<div class="card"><div class="card-row" style="margin:0;"><div><strong>${esc(l.other_name)}</strong> <span class="badge-pill">${l.status === "offered" ? "waiting for them" : l.overdue ? "overdue" : "active"}</span>
+      <div class="small-text">${loanLine(l)}${l.status === "active" ? ` · paid back ${money(l.paid)}, ${money(l.remaining)} to come` : ""}</div></div>
+      ${l.status === "offered" ? `<button class="btn small secondary" onclick="act(async () => { await Api.post('/api/loans/${l.id}/cancel'); say('Offer cancelled, your money is back.'); })">Cancel</button>` : ""}</div></div>`).join("") || `<p class="small-text">You haven't lent anything.</p>`;
+  $("history").innerHTML = L.history.map(l => `<div class="small-text" style="padding:.2rem 0;">${l.role === "lender" ? "Lent to" : "Borrowed from"} ${esc(l.other_name)}: ${loanLine(l)} → <strong>${l.status}</strong></div>`).join("") || "<span class='small-text'>Nothing yet.</span>";
+}
+function repay(id) { const v = parseFloat($(`rp-${id}`).value); act(async () => { const r = await Api.post(`/api/loans/${id}/repay`, { amount: v }); say(r.done ? "Loan fully repaid!" : `Paid ${money(r.paid)}. ${money(r.remaining)} to go.`); }); }
+function loanPreview() {
+  const a = +$("ln-amount").value || 0, i = +$("ln-interest").value || 0;
+  $("ln-preview").innerHTML = `They'd repay <strong>${money(a * (1 + i / 100))}</strong>: you'd earn <strong>${money(a * i / 100)}</strong> in interest if they pay in full. If they don't, you could lose the lot, so lend to people you trust.`;
+}
+async function showCredit() {
+  const u = $("ln-borrower").value; $("ln-credit").textContent = "";
+  if (!u) return;
+  try { const p = await Api.get(`/api/profile/${encodeURIComponent(u)}`), c = p.credit;
+    $("ln-credit").innerHTML = c ? `Their record: ${c.loans_taken} loan(s) taken, ${c.paid_on_time} paid on time, ${c.paid_late} late, ${c.overdue_now ? `<span class="pct-down">${c.overdue_now} overdue now</span>` : "none overdue"}. They currently owe ${money(c.owing_now)}.` : ""; } catch (e) {}
+}
+function makeOffer() {
+  act(async () => { const r = await Api.post("/api/loans/offer", { borrower: $("ln-borrower").value, amount: +$("ln-amount").value, interest_pct: +$("ln-interest").value, days: +$("ln-days").value });
+    say(`Offer sent. ${money(+$("ln-amount").value)} MWD is held until they answer.`); });
+}
+async function load() {
+  try {
+    [W, L] = await Promise.all([Api.get("/api/wallet"), Api.get("/api/loans")]);
+    if (!players.length) { players = await Api.get("/api/wallet/recipients"); $("ln-borrower").innerHTML = players.map(p => `<option value="${esc(p.username)}">${esc(p.display_name || p.username)}</option>`).join(""); showCredit(); }
+    drawSummary(); drawLoans(); if (!$("send-list").innerHTML) drawPlayers(); loanPreview();
+  } catch (e) { fail(e); }
+}
+load();
+</script>
+</body></html>
