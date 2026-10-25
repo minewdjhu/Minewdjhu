@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page">
+  <h1>🛍️ Shop</h1>
+  <p class="lede">Spend your MWD on small, fun perks from the stream. They're personal touches, nothing that changes how the stream runs. After you buy, Jack fulfils it and you'll get a notification.</p>
+  <div id="error" class="alert error hidden"></div><div id="success" class="alert success hidden"></div>
+  <div id="items" class="cards-grid">Loading…</div>
+  <div id="orders-wrap" class="hidden"><h2>Your orders</h2>
+    <table><thead><tr><th>Item</th><th>Paid</th><th>Your message</th><th>Status</th><th>When</th></tr></thead><tbody id="orders"></tbody></table></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+const statusLabel = { pending: "⏳ Waiting for Jack", fulfilled: "✅ Done", refunded: "↩️ Refunded" };
+function itemCard(i) {
+  const blocked = i.sold_out ? "Sold out" : i.limit_reached ? "You have the max" : null;
+  return `<div class="card item-card">
+    <div class="emoji">${esc(i.emoji)}</div><h3 style="margin:0;">${esc(i.name)}</h3>
+    <p class="subtitle desc" style="margin:0;" title="${esc(i.description)}">${esc(i.description)}</p>
+    <div class="small-text">${i.stock !== null ? `${i.stock} left` : "Unlimited"}${i.per_user_limit ? ` &middot; max ${i.per_user_limit} each` : ""}${i.bought_by_me ? ` &middot; you own ${i.bought_by_me}` : ""}</div>
+    ${i.needs_note && !blocked && Auth.isLoggedIn() ? `<input id="note-${i.id}" maxlength="300" placeholder="${esc(i.note_prompt || "Your message")}">` : ""}
+    <div class="card-row price-row" style="margin:0;"><span class="price">${money(i.price)} MWD</span>
+      ${blocked ? `<button class="btn secondary" disabled>${blocked}</button>`
+        : Auth.isLoggedIn() ? `<button class="btn" onclick="buy(${i.id}, ${i.needs_note})">Buy</button>` : `<a class="btn" href="login.html">Log in to buy</a>`}</div></div>`;
+}
+async function load() {
+  try {
+    document.getElementById("items").innerHTML = (await Api.get("/api/shop")).map(itemCard).join("") || `<div class="card">The shop is empty right now.</div>`;
+    if (Auth.isLoggedIn()) {
+      const o = await Api.get("/api/shop/orders");
+      document.getElementById("orders-wrap").classList.toggle("hidden", !o.length);
+      document.getElementById("orders").innerHTML = o.map(x => `<tr><td>${esc(x.item_name)}</td><td class="price">${money(x.price_paid)}</td><td>${esc(x.note || "")}</td><td>${statusLabel[x.status] || x.status}${x.admin_note ? `<div class="small-text">${esc(x.admin_note)}</div>` : ""}</td><td>${new Date(x.created_at + "Z").toLocaleString()}</td></tr>`).join("");
+    }
+  } catch (e) { showError(document.getElementById("error"), e); }
+}
+async function buy(id, needsNote) {
+  const errEl = document.getElementById("error"), okEl = document.getElementById("success");
+  clearError(errEl); okEl.classList.add("hidden");
+  const note = needsNote ? (document.getElementById(`note-${id}`) || {}).value || "" : "";
+  try {
+    const r = await Api.post(`/api/shop/${id}/buy`, { note });
+    okEl.textContent = `Bought: ${r.item}. Jack will sort it out, and you'll get a notification.`; okEl.classList.remove("hidden");
+    load();
+  } catch (e) { showError(errEl, e); }
+}
+load();
+</script></body></html>

@@ -30,7 +30,33 @@
     <div class="card">
       <h3>🧠 Minewdjhu Quiz</h3>
       <p class="subtitle">Answer correctly for a bigger reward.</p>
+      <div class="trade-form"><select id="quiz-topic"><option value="">All topics</option></select></div>
       <div id="quiz-area"><button class="btn" onclick="newQuestion()">Get a question</button></div>
+    </div>
+
+
+    <div class="card">
+      <h3>🐴 Horsinho Derby</h3>
+      <p class="subtitle">Back a horse. Long shots pay more. 5 races a day.</p>
+      <div id="derby-area">Loading…</div>
+    </div>
+
+    <div class="card">
+      <h3>⚖️ Court in Session</h3>
+      <p class="subtitle">Read the evidence and call the verdict. Match the jury to win.</p>
+      <div id="court-area"><button class="btn" onclick="newCase()">Take a case</button></div>
+    </div>
+
+    <div class="card">
+      <h3>🥒 Cucumber Hunt</h3>
+      <p class="subtitle">One of three crates hides the cucumber. One empty crate gets opened for you... then stay or switch?</p>
+      <div id="cuc-area"><button class="btn" onclick="cucStart()">New game</button></div>
+    </div>
+
+    <div class="card">
+      <h3>🔤 Lore Scramble</h3>
+      <p class="subtitle">Unscramble a word from the Minewdjhu lore.</p>
+      <div id="scr-area"><button class="btn" onclick="newWord()">Get a word</button></div>
     </div>
 
     <div class="card">
@@ -91,23 +117,84 @@ async function spinWheel() {
 
 // --- Quiz ---
 let currentQuizToken = null;
+(async () => {
+  try {
+    const topics = await Api.get("/api/arcade/minewdjhu-quiz/topics");
+    document.getElementById("quiz-topic").innerHTML = `<option value="">All topics</option>` + topics.map(t => `<option value="${esc(t.name)}">${esc(t.name)} (${t.count})</option>`).join("");
+  } catch (e) {}
+})();
 async function newQuestion() {
   const area = document.getElementById("quiz-area");
   try {
-    const q = await Api.get("/api/arcade/minewdjhu-quiz/question");
+    const topic = document.getElementById("quiz-topic").value;
+    const q = await Api.get("/api/arcade/minewdjhu-quiz/question" + (topic ? `?topic=${encodeURIComponent(topic)}` : ""));
     currentQuizToken = q.token;
-    area.innerHTML = `<p>${esc(q.question)}</p>` +
-      q.options.map((opt, i) => `<button class="btn secondary quiz-option" onclick="answerQuiz(${i})">${opt}</button>`).join("");
+    area.innerHTML = `<p class="small-text">${esc(q.category)} &middot; ${esc(q.difficulty)}</p><p>${esc(q.question)}</p>` +
+      q.options.map((opt, i) => `<button class="btn secondary quiz-option" onclick="answerQuiz(${i})">${esc(opt)}</button>`).join("");
   } catch (e) { area.innerHTML = e.message; }
 }
 async function answerQuiz(index) {
   try {
     const r = await Api.post("/api/arcade/minewdjhu-quiz/answer", { token: currentQuizToken, answer_index: index });
     document.getElementById("quiz-area").innerHTML = `<div class="alert ${r.correct ? 'success' : 'info'}">
-      ${r.correct ? "Correct!" : "Not quite."} You earned ${r.reward} MWD.</div>
+      ${r.correct ? "Correct!" : "Not quite."} You earned ${r.reward} MWD.${r.explanation ? `<div class="small-text" style="margin-top:.3rem;">${esc(r.explanation)}</div>` : ""}</div>
       <button class="btn" onclick="newQuestion()">Next question</button>`;
     loadSummary();
   } catch (e) { alert(e.message); }
+}
+
+
+// --- Mini-games (everything is decided on the server) ---
+const A = "/api/arcade/";
+const miniErr = (el, e) => { document.getElementById(el).innerHTML = `<div class="alert error">${esc(e.message)}</div><button class="btn secondary" onclick="location.reload()">OK</button>`; };
+(async () => {
+  try {
+    const field = await Api.get(A + "horsinho-derby/field");
+    document.getElementById("derby-area").innerHTML = field.map(h => `<div class="opt-row" style="padding:.35rem 0;"><div><strong>${esc(h.name)}</strong> <span class="small-text">${h.chance_pct}% to win · pays ${h.win_reward}</span></div><button class="btn small" onclick="runDerby('${esc(h.name)}')">Back it</button></div>`).join("");
+  } catch (e) {}
+})();
+async function runDerby(name) {
+  try { const r = await Api.post(A + "horsinho-derby/race", { horse: name });
+    document.getElementById("derby-area").innerHTML = `<ol style="margin:.2rem 0 .6rem 1.2rem;">${r.order.map(n => `<li>${esc(n)}${n === name ? " ⭐" : ""}</li>`).join("")}</ol>
+      <div class="alert ${r.won ? "success" : "info"}">${r.won ? "Your horse won!" : "Not this time."} You earned ${r.reward} MWD.</div><button class="btn secondary" onclick="location.reload()">Race again</button>`;
+  } catch (e) { miniErr("derby-area", e); }
+}
+let currentCase = null;
+async function newCase() {
+  try { currentCase = await Api.get(A + "court/case");
+    document.getElementById("court-area").innerHTML = `<strong>${esc(currentCase.title)}</strong><ul class="small-text" style="margin:.4rem 0 .6rem 1.2rem;padding:0;">${currentCase.evidence.map(e => `<li>${esc(e)}</li>`).join("")}</ul>
+      <div class="trade-form"><button class="btn" onclick="verdict('guilty')">Guilty</button><button class="btn secondary" onclick="verdict('not_guilty')">Not guilty</button></div>`;
+  } catch (e) { miniErr("court-area", e); }
+}
+async function verdict(v) {
+  try { const r = await Api.post(A + "court/verdict", { case_id: currentCase.case_id, verdict: v });
+    document.getElementById("court-area").innerHTML = `<div class="alert ${r.matched ? "success" : "info"}">The jury voted ${r.guilty_votes} of 9 guilty: <strong>${r.jury === "guilty" ? "GUILTY" : "NOT GUILTY"}</strong>. ${r.matched ? "You matched them!" : "Overruled."} You earned ${r.reward} MWD.</div><button class="btn" onclick="newCase()">Next case</button>`;
+  } catch (e) { miniErr("court-area", e); }
+}
+const crates = (open, pick, reveal) => [0, 1, 2].map(i => `<button class="btn ${pick === i ? "" : "secondary"}" style="min-width:74px;" ${open === null && pick === null ? `onclick="cucPick(${i})"` : "disabled"}>${reveal !== undefined ? (i === reveal ? "🥒" : "📦") : i === open ? "empty" : `Crate ${i + 1}`}</button>`).join(" ");
+async function cucStart() { try { await Api.post(A + "cucumber/start"); document.getElementById("cuc-area").innerHTML = `<p class="small-text">Pick a crate.</p>${crates(null, null)}`; } catch (e) { miniErr("cuc-area", e); } }
+async function cucPick(i) {
+  try { const r = await Api.post(A + "cucumber/pick", { crate: i });
+    document.getElementById("cuc-area").innerHTML = `<p class="small-text">Crate ${r.opened_empty + 1} is empty. You picked crate ${i + 1}. Stay, or switch to the other one?</p>${crates(r.opened_empty, r.pick)}
+      <div class="trade-form" style="margin-top:.6rem;"><button class="btn" onclick="cucFinal(false)">Stay</button><button class="btn secondary" onclick="cucFinal(true)">Switch</button></div>`;
+  } catch (e) { miniErr("cuc-area", e); }
+}
+async function cucFinal(sw) {
+  try { const r = await Api.post(A + "cucumber/final", { switch: sw });
+    document.getElementById("cuc-area").innerHTML = `${crates(0, r.final, r.cucumber).replace(/disabled/g, "disabled")}<div class="alert ${r.won ? "success" : "info"}" style="margin-top:.6rem;">${r.won ? "You found the cucumber!" : "Just an empty crate."} You earned ${r.reward} MWD.</div><button class="btn" onclick="cucStart()">Play again</button>`;
+  } catch (e) { miniErr("cuc-area", e); }
+}
+let currentWord = null;
+async function newWord() {
+  try { currentWord = await Api.get(A + "scramble/word");
+    document.getElementById("scr-area").innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;letter-spacing:.2em;margin:.4rem 0;">${esc(currentWord.scrambled)}</div><p class="small-text">${currentWord.length} letters. ${esc(currentWord.hint)}</p>
+      <div class="trade-form"><input id="scr-guess" maxlength="20" placeholder="Your answer"><button class="btn" onclick="guessWord()">Check</button></div>`;
+  } catch (e) { miniErr("scr-area", e); }
+}
+async function guessWord() {
+  try { const r = await Api.post(A + "scramble/answer", { word_id: currentWord.word_id, seed: currentWord.seed, answer: document.getElementById("scr-guess").value });
+    document.getElementById("scr-area").innerHTML = `<div class="alert ${r.correct ? "success" : "info"}">${r.correct ? "Correct!" : "Not quite."} It was <strong>${esc(r.word)}</strong>. You earned ${r.reward} MWD.</div><button class="btn" onclick="newWord()">Another word</button>`;
+  } catch (e) { miniErr("scr-area", e); }
 }
 
 // --- Market Mayhem ---

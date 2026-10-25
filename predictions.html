@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predictions | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow">
+  <h1>🔮 Predictions</h1>
+  <p class="lede">Back an answer with your MWD. When the admin settles it, <strong>everyone who backed the winning answer shares the whole pool</strong>, split by how much they put in. The fewer people on your side, the bigger your share. If nobody backed the winner, everyone gets their stake back.</p>
+  <div id="error" class="alert error hidden"></div><div id="success" class="alert success hidden"></div>
+  <div id="live">Loading…</div>
+  <h2>Recently settled</h2>
+  <div id="recent"></div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+let amounts = {};
+const isAdmin = Auth.isAdmin();
+function oddsLine(o) { return o.multiplier ? `pays <strong>x${o.multiplier}</strong> if it wins right now` : "nobody on this yet"; }
+function card(p) {
+  const open = p.status === "open", mine = p.my_bet;
+  const mineLabel = mine ? (p.options.find(o => o.id === mine.option_id) || {}).label : "";
+  const opts = p.options.map(o => `
+    <div class="opt-row">
+      <div style="flex:1 1 180px;"><strong>${esc(o.label)}</strong>${p.winning_option_id === o.id ? " &#127942;" : ""}
+        <div class="small-text">${o.backers} backer(s) &middot; ${money(o.pool)} MWD &middot; ${oddsLine(o)}</div></div>
+      <div class="bar"><i style="width:${o.share_pct}%"></i></div>
+      ${open && Auth.isLoggedIn() && !isAdmin && (!mine || mine.option_id === o.id)
+        ? `<button class="btn" onclick="bet(${p.id}, ${o.id})">${mine ? "Add to" : "Back"} this</button>` : ""}
+    </div>`).join("");
+  const form = open && Auth.isLoggedIn() && !isAdmin ? `
+    <div class="trade-form" style="margin-top:.6rem;">
+      <input type="number" id="amt-${p.id}" min="${p.min_bet}" max="${p.max_bet}" step="1" value="${amounts[p.id] || Math.max(p.min_bet, 25)}" oninput="amounts[${p.id}]=this.value">
+      <span class="small-text">Stake ${money(p.min_bet)} to ${money(p.max_bet)} MWD. Your stake leaves your wallet now and is paid back if you win.</span>
+    </div>` : (open && !Auth.isLoggedIn() ? `<p class="small-text"><a href="login.html">Log in</a> to back an answer.</p>` : (open && isAdmin ? `<p class="small-text">Admins run the predictions, so they can't bet.</p>` : ""));
+  return `<div class="card"><div class="card-row"><h3 style="margin:0;">${esc(p.title)}</h3>
+      <span class="badge-pill">${open ? "&#128994; Open" + (p.closes_at ? " &middot; " + timeLeft(p.closes_at) : "") : p.status === "locked" ? "&#128274; Betting closed" : p.status}</span></div>
+    ${p.description ? `<p class="subtitle">${esc(p.description)}</p>` : ""}
+    <p class="small-text">Pool <strong>${money(p.pool)} MWD</strong> &middot; ${p.players} player(s)${mine ? ` &middot; <strong>You: ${money(mine.amount)} on ${esc(mineLabel)}</strong>` : ""}</p>
+    ${opts}${form}</div>`;
+}
+function recentCard(p) {
+  const w = p.options.find(o => o.id === p.winning_option_id), m = p.my_bet;
+  return `<div class="card"><strong>${esc(p.title)}</strong>
+    <div class="small-text">${p.status === "cancelled" ? "Cancelled, stakes refunded." : `Result: <strong>${esc(w ? w.label : "?")}</strong> &middot; pool ${money(p.pool)} MWD`}
+    ${m ? ` &middot; You ${m.payout > m.amount ? `won <span class="pct-up">${money(m.payout)}</span>` : m.payout === m.amount ? "got your stake back" : `<span class="pct-down">lost ${money(m.amount)}</span>`}` : ""}</div></div>`;
+}
+async function load() {
+  try {
+    const d = await Api.get("/api/predictions");
+    document.getElementById("live").innerHTML = d.live.map(card).join("") || `<div class="card">No open predictions right now. Check back during the stream!</div>`;
+    document.getElementById("recent").innerHTML = d.recent.map(recentCard).join("") || `<p class="small-text">Nothing settled yet.</p>`;
+  } catch (e) { showError(document.getElementById("error"), e); }
+}
+async function bet(pid, oid) {
+  const errEl = document.getElementById("error"), okEl = document.getElementById("success");
+  clearError(errEl); okEl.classList.add("hidden");
+  try {
+    const r = await Api.post(`/api/predictions/${pid}/bet`, { option_id: oid, amount: parseFloat(document.getElementById(`amt-${pid}`).value) });
+    okEl.textContent = `Locked in on "${r.option}". Your total stake here: ${money(r.my_stake)} MWD.`; okEl.classList.remove("hidden");
+    load();
+  } catch (e) { showError(errEl, e); }
+}
+load();
+setInterval(() => { if (document.visibilityState === "visible" && !document.activeElement.matches("input")) load(); }, 20000);
+</script></body></html>

@@ -35,7 +35,7 @@ async function load() {
 
     document.getElementById("official-rows").innerHTML = official.map(m => `
       <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
-        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a>${m.project ? ' <span title="Project stock: tight price range until the project launches">🔒</span>' : ''}</td>
         <td>${esc(m.name)}</td>
         <td class="price">${money(m.price)}</td>
         <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
@@ -45,7 +45,7 @@ async function load() {
 
     document.getElementById("creator-rows").innerHTML = creator.map(m => `
       <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
-        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a></td>
+        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a>${m.project ? ' <span title="Project stock: tight price range until the project launches">🔒</span>' : ''}</td>
         <td>${esc(m.name)}</td>
         <td>${m.creator_username || "-"}</td>
         <td class="price">${money(m.price)}</td>

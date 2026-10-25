@@ -42,6 +42,7 @@ async function render() {
     try { tag = await Api.get("/api/risk/my-tag"); } catch (e) { /* ignore */ }
   }
 
+  window.__project = m.project;
   const isOwner = Auth.isLoggedIn() && Auth.getUsername() === m.creator_username;
 
   content.innerHTML = `
@@ -53,6 +54,7 @@ async function render() {
           <span class="badge-pill ${m.health}">${m.health}</span>
           ${m.status !== 'active' ? `<span class="badge-pill status-${esc(m.status)}">${esc(m.status)}</span>` : ''}
           ${m.is_creator_market ? '<span class="badge-pill">creator market</span>' : ''}
+          ${projectTag(m)}
         </div>
       </div>
       <div style="text-align:right;">
@@ -85,8 +87,10 @@ async function render() {
       <h2>Trade</h2>
       <div class="grid cols-2">
         <div class="card"><strong>Buy ${esc(m.symbol)}</strong>
-          <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="buy-shares"></label>
-          <button class="btn" onclick="doTrade('buy')">Buy</button></div></div>
+          <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="buy-shares" ${m.creator_model === 2 ? 'oninput="quotePreview()"' : ""}></label>
+          <button class="btn" onclick="doTrade('buy')">Buy</button></div>
+          ${m.creator_model === 2 ? `<div id="buy-quote" class="small-text" style="margin-top:.5rem;">A creator coin: <strong>${m.creator_fee_pct}%</strong> of each purchase goes to its creator (taken from what you pay, never from a sale). Type a number of shares to see the exact split.</div>` : ""}
+          ${m.project ? `<p class="small-text" style="margin:.5rem 0 0;">🔒 Project stock: tight price range. If the project fails, only ${m.project.refund_pct}% of what you put in comes back. You can sell any time.</p>` : ""}</div>
         <div class="card"><strong>Sell ${esc(m.symbol)}</strong>
           <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="sell-shares" ${holding ? `max="${holding.shares}"` : ""}></label>
           <button class="btn secondary" onclick="doTrade('sell')">Sell</button></div>
@@ -96,19 +100,7 @@ async function render() {
     ` : `<div class="alert info">This market is ${esc(m.status)} right now, so trading is paused.</div>`) :
       `<div class="alert info"><a href="login.html">Log in</a> or <a href="register.html">sign up</a> to trade ${esc(m.symbol)}.</div>`}
 
-    ${isOwner ? `
-      <h2>Creator controls</h2>
-      <div class="card">
-        <div class="chip-row">
-          ${m.status === 'active' ? `<button class="btn secondary" onclick="creatorAction('freeze')">Freeze market</button>`
-                                   : `<button class="btn secondary" onclick="creatorAction('unfreeze')">Unfreeze market</button>`}
-        </div>
-        <h3>Redeem your equity</h3>
-        <p class="subtitle">You can redeem up to 25% of your current equity stake per transaction (safety limit).</p>
-        <div class="trade-form"><label>Shares<input type="number" step="0.0001" min="0.0001" id="redeem-shares"></label>
-          <button class="btn" onclick="redeemEquity()">Redeem</button></div>
-      </div>
-    ` : ""}
+    ${m.creator_model === 2 ? `<div id="creator-section"><h2>${isOwner ? "Your coin" : "Creator activity"}</h2><div class="card" id="creator-body">Loading…</div></div>` : ""}
 
     ${Auth.isLoggedIn() ? `
       <h2>Risk Recovery</h2>
@@ -125,6 +117,7 @@ async function render() {
 
   loadMarketChart(document.getElementById("chart"), m.symbol);
   loadChat();
+  if (m.creator_model === 2) loadCreatorPanel(m, isOwner);
   if (Auth.isLoggedIn()) renderRiskCard(tag);
 }
 
@@ -149,9 +142,32 @@ async function untagMarket() {
   try { await Api.post(`/api/risk/untag`); render(); } catch (e) { alert(e.message); }
 }
 
+function projectTag(m) {
+  const p = m.project;
+  if (!p) return "";
+  const when = p.updated_at ? new Date(p.updated_at + "Z").toLocaleDateString() : "";
+  return `<details class="project-tag"><summary class="badge-pill" title="What is this?">🔒 Project stock</summary>
+    <div class="pop">
+      <strong>${esc(p.title)}</strong>
+      <div class="bar" style="margin:.5rem 0 .2rem;"><i style="width:${p.progress}%"></i></div>
+      <div class="small-text">${p.progress}% complete${when ? ` &middot; updated ${when}` : ""}</div>
+      ${p.note ? `<p style="margin:.5rem 0;">${esc(p.note)}</p>` : ""}
+      <ul class="small-text" style="margin:.4rem 0 0 1rem;padding:0;">
+        <li><strong>Tight boundaries.</strong> The price stays within about ${p.band_pct}% of ${money(p.baseline)} and barely moves until the project is decided.</li>
+        <li><strong>If it launches,</strong> the stock unlocks and everyone holding it gets a boost, announced in Discord.</li>
+        <li><strong>If it fails,</strong> only ${p.refund_pct}% of what you put in comes back and the rest is lost.</li>
+        <li>You can buy and sell as normal until then.</li>
+      </ul>
+    </div></details>`;
+}
+
 async function doTrade(side) {
   const errEl = document.getElementById("trade-error"), okEl = document.getElementById("trade-success");
   clearError(errEl); okEl.classList.add("hidden");
+  if (side === "buy" && window.__project && !sessionStorage.getItem("mwd_proj_ok_" + symbol)) {
+    if (!confirm(`${symbol} is a PROJECT STOCK.\n\nIts price stays in a tight range until the project is decided. If the project fails, only ${window.__project.refund_pct}% of what you put in comes back.\n\nBuy anyway?`)) return;
+    sessionStorage.setItem("mwd_proj_ok_" + symbol, "1");
+  }
   const shares = parseFloat(document.getElementById(side + "-shares").value);
   try {
     const result = await Api.post(`/api/markets/${symbol}/${side}`, { shares });
@@ -161,19 +177,89 @@ async function doTrade(side) {
   } catch (e) { showError(errEl, e); }
 }
 
-async function creatorAction(action) {
-  try { await Api.post(`/api/markets/${symbol}/${action}`); render(); } catch (e) { alert(e.message); }
+let quoteTimer = null;
+function quotePreview() {
+  clearTimeout(quoteTimer);
+  quoteTimer = setTimeout(async () => {
+    const box = document.getElementById("buy-quote"), v = parseFloat(document.getElementById("buy-shares").value);
+    if (!box || !(v > 0)) return;
+    try {
+      const q = await Api.get(`/api/markets/${symbol}/quote?shares=${v}`);
+      box.innerHTML = `You pay <strong>${money(q.total)}</strong>. Of that, <strong>${money(q.creator_fee)}</strong> (${q.fee_pct.toFixed(1)}%) goes to the creator and <strong>${money(q.invested)}</strong> goes into the coin, so the price ends at about ${money(q.new_price)}.`
+        + (q.platform_fee > 0 ? ` Platform fee ${money(q.platform_fee)}.` : "") + (q.note ? `<br><span class="small-text">${esc(q.note)}</span>` : "");
+    } catch (e) { box.textContent = e.message; }
+  }, 300);
 }
 
-async function redeemEquity() {
-  const errEl = document.getElementById("trade-error");
-  clearError(errEl);
-  const shares = parseFloat(document.getElementById("redeem-shares").value);
+const evLabel = { creator_withdrawal: "took out", creator_topup: "added", rug_pull: "RUG PULL", creator_details: "changed the details" };
+function feedHtml(feed) {
+  return feed.length ? `<ul class="small-text" style="margin:.4rem 0 0 1rem;padding:0;">${feed.map(f => `<li>${new Date(f.ts + "Z").toLocaleString()}: the creator ${evLabel[f.type] || f.type}${f.type === "creator_details" ? "" : ` ${money(f.amount)} MWD`}${f.type === "rug_pull" ? ` &middot; price ${money(f.price_before)} → ${money(f.price_after)}` : ""}${f.launch_boost ? " (launch boost)" : ""}</li>`).join("")}</ul>` : `<p class="small-text" style="margin:.4rem 0 0;">Nothing yet.</p>`;
+}
+
+async function loadCreatorPanel(m, isOwner) {
+  const body = document.getElementById("creator-body");
+  if (!body) return;
   try {
-    const result = await Api.post(`/api/markets/${symbol}/redeem-equity`, { shares });
-    alert(`Redeemed ${result.shares} shares for ${money(result.total)} MWD.`);
-    render();
-  } catch (e) { showError(errEl, e); }
+    const s = await Api.get(`/api/markets/${symbol}/creator`);
+    const pub = `<div class="grid cols-3">
+        <div class="stat-tile"><div class="label">Real investors</div><div class="value">${s.holders}</div></div>
+        <div class="stat-tile"><div class="label">Money in the coin</div><div class="value">${money(s.money_in_coin)}</div></div>
+        <div class="stat-tile"><div class="label">Creator owns</div><div class="value">${s.ownership_pct}%</div></div></div>
+      <p class="small-text" style="margin:.6rem 0 0;">Creator fee on purchases: <strong>${s.fee_rate_pct}%</strong>${s.fee_mode === "admin" ? " (set by an admin)" : " (moves with how healthy the coin is)"}. ${s.rug_pulled ? '<span class="pct-down"><strong>This creator has pulled a rug on this coin.</strong></span>' : ""}</p>
+      <details class="why"><summary>Recent creator activity</summary>${feedHtml(s.feed)}</details>`;
+    if (!isOwner || !s.owner) { body.innerHTML = pub; return; }
+    const o = s.owner;
+    body.innerHTML = `
+      <div class="alert info" style="margin-top:0;"><strong>You can safely take out ${money(o.max_withdraw)} MWD right now.</strong>
+        That's your own money plus your share of the coin's growth. Take more than that and it comes out of other players' money: the price crashes and you're flagged as a Risky Creator.</div>
+      <div class="grid cols-3">
+        <div class="stat-tile"><div class="label">Your cashable equity</div><div class="value">${money(o.equity_cash)}</div><div class="small-text">money you put in, plus growth</div></div>
+        <div class="stat-tile"><div class="label">Starter grant (locked)</div><div class="value">${money(o.equity_locked)}</div><div class="small-text">${o.has_grant ? "counts for ownership, can't be cashed out" : "none (one grant per player, ever)"}</div></div>
+        <div class="stat-tile"><div class="label">Creator fees earned</div><div class="value">${money(o.fees_total)}</div><div class="small-text">already in your wallet, separate from equity</div></div></div>
+      <p class="small-text">You've put in ${money(o.deposits_total)} and taken out ${money(o.withdrawn_total)}. Investors currently hold ${money(o.investor_value)} worth of the coin.</p>
+
+      <h3>Creator fee</h3>
+      <p>Right now purchases pay you <strong>${s.fee_rate_pct}%</strong> (${o.fee_mode === "admin" ? `an admin set ${o.rate_overridden ? "the rate" : ""}${o.rate_overridden && o.cap_overridden ? " and " : ""}${o.cap_overridden ? "the daily cap" : ""} for this coin` : "standard dynamic rate"}).
+        Today: <strong>${money(o.fees_today)}</strong> of <strong>${money(o.fee_cap)}</strong> paid out, <strong>${money(o.fee_remaining)}</strong> left. Resets ${new Date(o.fee_resets_at + "Z").toLocaleString()}.</p>
+      <details class="why"><summary>Why is my rate ${s.fee_rate_pct}%?</summary><ul class="small-text" style="margin:.4rem 0 0 1rem;padding:0;">${o.explain.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul></details>
+
+      <div class="grid cols-2" style="margin-top:1rem;">
+        <div><h3 style="margin-top:0;">Take money out</h3>
+          <div class="trade-form"><input type="number" id="wd-amount" min="0" step="0.01" placeholder="Amount" oninput="wdWarn(${o.max_withdraw})"><button class="btn secondary" onclick="document.getElementById('wd-amount').value=${o.max_withdraw};wdWarn(${o.max_withdraw})">Max safe</button><button class="btn" onclick="creatorWithdraw()">Withdraw</button></div>
+          <div id="wd-warn" class="alert error hidden" style="margin-top:.5rem;"></div></div>
+        <div><h3 style="margin-top:0;">Add equity</h3>
+          <div class="trade-form"><input type="number" id="eq-amount" min="1" step="1" placeholder="Amount (max ${money(o.max_deposit)})"><button class="btn" onclick="creatorAddEquity()">Add equity</button></div>
+          <p class="small-text" style="margin:.4rem 0 0;">Your own MWD goes into your equity and gives the coin a boost. It's <strong>not an investor purchase</strong>: no fee is charged and none is earned.</p></div></div>
+
+      <details class="why" style="margin-top:1rem;"><summary>Change name or description (costs ${money(o.detail_fee)} MWD)</summary>
+        <div class="form-grid" style="margin-top:.6rem;"><label>Name<input id="cd-name" maxlength="80" value="${esc(m.name)}"></label><label style="grid-column:span 2;">Description<input id="cd-desc" maxlength="500" value="${esc(m.description || "")}"></label><button class="btn secondary" onclick="creatorDetails()">Save changes</button></div></details>
+      <details class="why"><summary>Your fee and equity records</summary>${o.ledger.length ? `<table class="tight"><thead><tr><th>When</th><th>What</th><th>Amount</th><th>Fee</th><th>Went into the coin</th></tr></thead><tbody>${o.ledger.map(e => `<tr><td>${new Date(e.ts + "Z").toLocaleString()}</td><td>${esc(e.kind === "equity_add" ? "you added equity" : e.kind)}${e.bot ? ' <span class="bot-tag">🤖</span>' : ""}${e.note ? `<div class="small-text">${esc(e.note)}</div>` : ""}</td><td>${money(e.gross)}</td><td>${e.fee ? `${money(e.fee)} (${e.fee_pct.toFixed(1)}%)` : "-"}</td><td>${money(e.invested)}</td></tr>`).join("")}</tbody></table>` : "<p class='small-text'>Nothing yet.</p>"}</details>
+      <details class="why"><summary>Public activity feed</summary>${feedHtml(s.feed)}</details>
+      <p class="small-text">Your coin can only be removed by an admin.</p>`;
+  } catch (e) { body.textContent = "Couldn't load creator details."; }
+}
+function wdWarn(max) {
+  const v = parseFloat(document.getElementById("wd-amount").value), w = document.getElementById("wd-warn");
+  if (v > max + 0.05) { w.textContent = `That's ${money(v - max)} more than your safe amount. The extra is other players' money: the price will crash, you'll be flagged as a Risky Creator, and it's announced.`; w.classList.remove("hidden"); } else w.classList.add("hidden");
+}
+async function creatorWithdraw() {
+  const errEl = document.getElementById("trade-error"); clearError(errEl);
+  const v = parseFloat(document.getElementById("wd-amount").value);
+  if (!(v > 0)) return;
+  const warned = !document.getElementById("wd-warn").classList.contains("hidden");
+  if (warned && !confirm("This is more than your safe amount, so it counts as a RUG PULL. The price will crash and you'll be flagged as a Risky Creator. Do it anyway?")) return;
+  try { const r = await Api.post(`/api/markets/${symbol}/creator/withdraw`, { amount: v }); alert(r.rug_pull ? `Taken: ${money(r.paid)} MWD. This was a rug pull and the coin has crashed.` : `Taken out: ${money(r.paid)} MWD.`); render(); } catch (e) { showError(errEl, e); }
+}
+async function creatorAddEquity() {
+  const errEl = document.getElementById("trade-error"); clearError(errEl);
+  const v = parseFloat(document.getElementById("eq-amount").value);
+  if (!(v > 0)) return;
+  try { const r = await Api.post(`/api/markets/${symbol}/creator/add-equity`, { amount: v }); alert(`Added ${money(r.added)} MWD to your equity. The price is now ${money(r.new_price)}.`); render(); } catch (e) { showError(errEl, e); }
+}
+async function creatorDetails() {
+  const errEl = document.getElementById("trade-error"); clearError(errEl);
+  if (!confirm("Changing the name or description costs a fee. Continue?")) return;
+  try { const r = await Api.post(`/api/markets/${symbol}/creator/details`, { name: document.getElementById("cd-name").value, description: document.getElementById("cd-desc").value }); alert(`Saved. ${money(r.fee)} MWD was taken.`); render(); } catch (e) { showError(errEl, e); }
 }
 
 async function loadChat() {
