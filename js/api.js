@@ -88,7 +88,11 @@ const Api = {
   },
 
   get(path) { return this._request("GET", path); },
-  post(path, body) { return this._request("POST", path, body === undefined ? {} : body); },
+  post(path, body) {
+    const p = this._request("POST", path, body === undefined ? {} : body);
+    p.then(() => { if (typeof scheduleBalanceRefresh === "function" && Auth.isLoggedIn()) scheduleBalanceRefresh(); }).catch(() => {});
+    return p;
+  },
 };
 
 // --- Small shared UI helpers, used across every page ------------------------
@@ -138,6 +142,11 @@ function renderNav() {
   el.innerHTML = `
     <div class="nav-inner">
       <a class="brand" href="${ROOT}index.html"><span class="brand-mark">M</span><span>Minewdjhu</span></a>
+      ${loggedIn ? `<a class="nav-balance" id="nav-balance" href="${ROOT}wallet.html" title="Your wallet: send money, daily bonus, loans">
+        <span class="nav-balance-coin" aria-hidden="true"></span>
+        <span class="nav-balance-label">Wallet</span>
+        <span class="nav-balance-value" id="nav-balance-value">${cachedBalanceText()}</span>
+      </a>` : ""}
       <button class="nav-toggle" aria-label="Menu" onclick="document.getElementById('nav').classList.toggle('open')">Menu</button>
       <nav class="mainnav">
         ${link("markets.html", "Markets")}
@@ -167,8 +176,62 @@ function renderNav() {
           <a class="nav-btn" href="${ROOT}register.html">Sign up</a>
         `}
       </div>
-    </div>`;
-  if (loggedIn) refreshBell();
+    </div>
+    <div id="live-banner" class="live-banner hidden"></div>`;
+  if (loggedIn) { refreshBell(); refreshBalance(); startBalancePolling(); }
+  refreshLiveBanner();
+}
+
+// --- "Something is happening" banner (live events and open predictions) ------
+// One tiny cached request per page, remembered for 45 seconds so browsing around costs nothing.
+function timeLeft(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, Math.floor((new Date(iso + (iso.endsWith("Z") ? "" : "Z")) - Date.now()) / 1000));
+  return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m left` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s left`;
+}
+async function refreshLiveBanner() {
+  const el = document.getElementById("live-banner");
+  if (!el) return;
+  let live = null;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem("mwd_live") || "null");
+    if (cached && Date.now() - cached.at < 45000) live = cached.data;
+  } catch (e) {}
+  if (!live) {
+    try { live = await Api.get("/api/live"); sessionStorage.setItem("mwd_live", JSON.stringify({ at: Date.now(), data: live })); }
+    catch (e) { return; }
+  }
+  const chips = [
+    ...live.events.slice(0, 2).map(e => `<a href="${ROOT}events.html"><span class="live-dot"></span><strong>LIVE:</strong> ${esc(e.title)}${e.ends_at ? ` &middot; ${timeLeft(e.ends_at)}` : ""} <u>what's this?</u></a>`),
+    ...live.predictions.slice(0, 1).map(p => `<a href="${ROOT}predictions.html">&#128302; <strong>Open prediction:</strong> ${esc(p.title)} <u>bet now</u></a>`),
+  ];
+  const sig = chips.join("|");
+  if (!chips.length || sessionStorage.getItem("mwd_live_dismissed") === sig) { el.classList.add("hidden"); return; }
+  el.innerHTML = chips.join("") + `<button class="link-btn" title="Hide" onclick="sessionStorage.setItem('mwd_live_dismissed', ${JSON.stringify(sig).replace(/"/g, "&quot;")}); this.parentElement.classList.add('hidden');">&times;</button>`;
+  el.classList.remove("hidden");
+}
+// --- Wallet balance chip in the nav (links to the wallet page) ----------------
+// The last known balance is remembered for the tab so the chip never flashes empty while it refreshes.
+function cachedBalanceText() {
+  try { const v = sessionStorage.getItem("mwd_balance"); return v === null ? "&hellip;" : money(v) + " MWD"; } catch (e) { return "&hellip;"; }
+}
+async function refreshBalance() {
+  const el = document.getElementById("nav-balance-value");
+  if (!el || !Auth.isLoggedIn()) return;
+  try {
+    const w = await Api.get("/api/wallet");
+    try { sessionStorage.setItem("mwd_balance", String(w.balance)); } catch (e) {}
+    el.textContent = money(w.balance) + " MWD";
+  } catch (e) { /* the chip is a nicety, never block a page on it */ }
+}
+let _balanceTimer = null;
+function scheduleBalanceRefresh() {
+  clearTimeout(_balanceTimer);
+  _balanceTimer = setTimeout(refreshBalance, 600);
+}
+function startBalancePolling() {
+  if (window._balancePoll) return;
+  window._balancePoll = setInterval(() => { if (!document.hidden) refreshBalance(); }, 60000);
 }
 
 async function refreshBell() {
