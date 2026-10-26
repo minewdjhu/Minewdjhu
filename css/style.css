@@ -364,3 +364,12 @@ table.tight td, table.tight th { padding: 0.4rem 0.6rem; }
 .item-card .desc { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
 .item-card .price-row { margin-top: auto; padding-top: .4rem; }
 .item-card input { width: 100%; }
+
+/* ---------- Wallet balance chip (nav) ---------- */
+.nav-balance { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.32rem 0.8rem; border-radius: var(--pill);
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font-size: 0.88rem; white-space: nowrap; }
+.nav-balance:hover { text-decoration: none; border-color: var(--emerald); }
+.nav-balance-coin { width: 0.85rem; height: 0.85rem; border-radius: 50%; background: linear-gradient(135deg, var(--amber), var(--emerald)); }
+.nav-balance-label { color: var(--text-dim); }
+.nav-balance-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .nav-balance-label { display: none; } }
