@@ -79,6 +79,10 @@
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script>
+function earned(x) {
+  return Number(x) > 0 ? `You earned ${x} MWD.` : "You earned 0 MWD because you have reached today's arcade cap. It resets tomorrow.";
+}
+
 Auth.requireLogin();
 
 async function loadSummary() {
@@ -86,7 +90,7 @@ async function loadSummary() {
     const s = await Api.get("/api/arcade/summary");
     const bar = document.getElementById("summary-bar");
     bar.classList.remove("hidden");
-    bar.innerHTML = `Earned today: <strong>${money(s.reward_today)}</strong> / ${money(s.reward_cap)} daily cap`;
+    bar.innerHTML = `Earned today: <strong>${money(s.reward_today)}</strong> / ${money(s.reward_cap)} daily cap${Number(s.reward_today) >= Number(s.reward_cap) ? " &middot; <strong>cap reached, resets tomorrow</strong>" : ""}`;
   } catch (e) { /* ignore */ }
 }
 loadSummary();
@@ -137,7 +141,7 @@ async function answerQuiz(index) {
   try {
     const r = await Api.post("/api/arcade/minewdjhu-quiz/answer", { token: currentQuizToken, answer_index: index });
     document.getElementById("quiz-area").innerHTML = `<div class="alert ${r.correct ? 'success' : 'info'}">
-      ${r.correct ? "Correct!" : "Not quite."} You earned ${r.reward} MWD.${r.explanation ? `<div class="small-text" style="margin-top:.3rem;">${esc(r.explanation)}</div>` : ""}</div>
+      ${r.correct ? "Correct!" : "Not quite."} ${earned(r.reward)}${r.explanation ? `<div class="small-text" style="margin-top:.3rem;">${esc(r.explanation)}</div>` : ""}</div>
       <button class="btn" onclick="newQuestion()">Next question</button>`;
     loadSummary();
   } catch (e) { alert(e.message); }
@@ -156,7 +160,7 @@ const miniErr = (el, e) => { document.getElementById(el).innerHTML = `<div class
 async function runDerby(name) {
   try { const r = await Api.post(A + "horsinho-derby/race", { horse: name });
     document.getElementById("derby-area").innerHTML = `<ol style="margin:.2rem 0 .6rem 1.2rem;">${r.order.map(n => `<li>${esc(n)}${n === name ? " ⭐" : ""}</li>`).join("")}</ol>
-      <div class="alert ${r.won ? "success" : "info"}">${r.won ? "Your horse won!" : "Not this time."} You earned ${r.reward} MWD.</div><button class="btn secondary" onclick="location.reload()">Race again</button>`;
+      <div class="alert ${r.won ? "success" : "info"}">${r.won ? "Your horse won!" : "Not this time."} ${earned(r.reward)}</div><button class="btn secondary" onclick="location.reload()">Race again</button>`;
   } catch (e) { miniErr("derby-area", e); }
 }
 let currentCase = null;
@@ -168,7 +172,7 @@ async function newCase() {
 }
 async function verdict(v) {
   try { const r = await Api.post(A + "court/verdict", { case_id: currentCase.case_id, verdict: v });
-    document.getElementById("court-area").innerHTML = `<div class="alert ${r.matched ? "success" : "info"}">The jury voted ${r.guilty_votes} of 9 guilty: <strong>${r.jury === "guilty" ? "GUILTY" : "NOT GUILTY"}</strong>. ${r.matched ? "You matched them!" : "Overruled."} You earned ${r.reward} MWD.</div><button class="btn" onclick="newCase()">Next case</button>`;
+    document.getElementById("court-area").innerHTML = `<div class="alert ${r.matched ? "success" : "info"}">The jury voted ${r.guilty_votes} of 9 guilty: <strong>${r.jury === "guilty" ? "GUILTY" : "NOT GUILTY"}</strong>. ${r.matched ? "You matched them!" : "Overruled."} ${earned(r.reward)}</div><button class="btn" onclick="newCase()">Next case</button>`;
   } catch (e) { miniErr("court-area", e); }
 }
 const crates = (open, pick, reveal) => [0, 1, 2].map(i => `<button class="btn ${pick === i ? "" : "secondary"}" style="min-width:74px;" ${open === null && pick === null ? `onclick="cucPick(${i})"` : "disabled"}>${reveal !== undefined ? (i === reveal ? "🥒" : "📦") : i === open ? "empty" : `Crate ${i + 1}`}</button>`).join(" ");
@@ -181,7 +185,7 @@ async function cucPick(i) {
 }
 async function cucFinal(sw) {
   try { const r = await Api.post(A + "cucumber/final", { switch: sw });
-    document.getElementById("cuc-area").innerHTML = `${crates(0, r.final, r.cucumber).replace(/disabled/g, "disabled")}<div class="alert ${r.won ? "success" : "info"}" style="margin-top:.6rem;">${r.won ? "You found the cucumber!" : "Just an empty crate."} You earned ${r.reward} MWD.</div><button class="btn" onclick="cucStart()">Play again</button>`;
+    document.getElementById("cuc-area").innerHTML = `${crates(0, r.final, r.cucumber).replace(/disabled/g, "disabled")}<div class="alert ${r.won ? "success" : "info"}" style="margin-top:.6rem;">${r.won ? "You found the cucumber!" : "Just an empty crate."} ${earned(r.reward)}</div><button class="btn" onclick="cucStart()">Play again</button>`;
   } catch (e) { miniErr("cuc-area", e); }
 }
 let currentWord = null;
@@ -193,7 +197,7 @@ async function newWord() {
 }
 async function guessWord() {
   try { const r = await Api.post(A + "scramble/answer", { word_id: currentWord.word_id, seed: currentWord.seed, answer: document.getElementById("scr-guess").value });
-    document.getElementById("scr-area").innerHTML = `<div class="alert ${r.correct ? "success" : "info"}">${r.correct ? "Correct!" : "Not quite."} It was <strong>${esc(r.word)}</strong>. You earned ${r.reward} MWD.</div><button class="btn" onclick="newWord()">Another word</button>`;
+    document.getElementById("scr-area").innerHTML = `<div class="alert ${r.correct ? "success" : "info"}">${r.correct ? "Correct!" : "Not quite."} It was <strong>${esc(r.word)}</strong>. ${earned(r.reward)}</div><button class="btn" onclick="newWord()">Another word</button>`;
   } catch (e) { miniErr("scr-area", e); }
 }
 
@@ -218,7 +222,7 @@ async function guessMayhem(guess) {
   try {
     const r = await Api.post("/api/arcade/market-mayhem/guess", { symbol, guess });
     document.getElementById("mayhem-result").innerHTML = `<div class="alert ${r.correct ? 'success' : 'info'}">
-      It went ${r.actual}. ${r.correct ? "You called it!" : "Not this time."} +${r.reward} MWD.</div>`;
+      It went ${r.actual}. ${r.correct ? "You called it!" : "Not this time."} ${r.reward > 0 ? "+" + r.reward + " MWD." : "Daily arcade cap reached, so no MWD this time. It resets tomorrow."}</div>`;
     loadSummary();
   } catch (e) { alert(e.message); }
 }
@@ -246,7 +250,7 @@ async function submitReflex(game, score) {
   const path = game === "ooga_run" ? "/api/arcade/ooga-run/report" : "/api/arcade/dong-dodger/report";
   try {
     const r = await Api.post(path, { score });
-    document.getElementById("reflex-game").innerHTML += `<div class="alert success" style="margin-top:0.6rem;">Final score ${score}, earned ${r.reward} MWD.</div>`;
+    document.getElementById("reflex-game").innerHTML += `<div class="alert success" style="margin-top:0.6rem;">Final score ${score}. ${earned(r.reward)}</div>`;
     loadSummary();
   } catch (e) {
     document.getElementById("reflex-game").innerHTML += `<div class="alert error" style="margin-top:0.6rem;">${esc(e.message)}</div>`;
