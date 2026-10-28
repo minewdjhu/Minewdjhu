@@ -90,7 +90,9 @@ async function loadSummary() {
     const s = await Api.get("/api/arcade/summary");
     const bar = document.getElementById("summary-bar");
     bar.classList.remove("hidden");
-    bar.innerHTML = `Earned today: <strong>${money(s.reward_today)}</strong> / ${money(s.reward_cap)} daily cap${Number(s.reward_today) >= Number(s.reward_cap) ? " &middot; <strong>cap reached, resets tomorrow</strong>" : ""}`;
+    bar.innerHTML = s.reward_cap === null || s.reward_cap === undefined
+      ? `Earned today: <strong>${money(s.reward_today)}</strong> &middot; no daily limit`
+      : `Earned today: <strong>${money(s.reward_today)}</strong> / ${money(s.reward_cap)} daily cap${Number(s.reward_today) >= Number(s.reward_cap) ? " &middot; <strong>cap reached, resets tomorrow</strong>" : ""}`;
   } catch (e) { /* ignore */ }
 }
 loadSummary();
