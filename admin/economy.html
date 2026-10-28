@@ -45,6 +45,14 @@ async function render() {
       <button class="btn" type="submit">Save</button>
     </form>
 
+    <h2>Arcade daily earnings limit</h2>
+    <form class="stacked" id="arcade-form">
+      <label class="check"><input type="checkbox" id="arcade-on" ${e.arcade_cap.enabled ? "checked" : ""}> Limit how much each player can earn from the arcade per day</label>
+      <label>Most one player can earn per day (MWD)<input type="number" id="arcade-amount" min="1" max="1000000" step="10" value="${e.arcade_cap.amount}"></label>
+      <span class="small-text">Untick the box to remove the limit completely. The daily play limit per game still applies. The standard amount is ${e.arcade_cap.default}.</span>
+      <button class="btn" type="submit">Save</button>
+    </form>
+
     <h2>Market speed</h2>
     <p class="small-text">The most often a market is allowed to move, depending on how many players are online right now. Markets only move when someone looks at them, so a shorter time means they catch up sooner. Saved instantly, no restart needed.</p>
     <div class="card"><div class="form-grid">${e.tick_settings.map(t => `<label>${esc(t.label)} (minutes)<input type="number" id="tick-${t.key}" min="1" max="1440" value="${t.minutes}"><span class="small-text">${t.customised ? "customised" : "default"} (standard is ${t.default})</span></label>`).join("")}</div>
@@ -93,6 +101,13 @@ async function render() {
     ev.preventDefault();
     try { await Api.post("/api/admin/economy/settings", { trading_fee_pct: parseFloat(document.getElementById("fee").value) }); alert("Saved."); }
     catch (err) { alert(err.message); }
+  });
+  document.getElementById("arcade-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      await Api.post("/api/admin/economy/arcade-cap", { enabled: document.getElementById("arcade-on").checked, amount: parseFloat(document.getElementById("arcade-amount").value) });
+      alert("Saved.");
+    } catch (err) { alert(err.message); }
   });
   document.getElementById("ws-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();

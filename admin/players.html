@@ -94,6 +94,18 @@ function setWallet(id, name, current) {
   const reason = prompt("Why? (saved in the audit log and shown to the player)", ""); if (reason === null) return;
   call(async () => { const r = await Api.post(`/api/admin/players/${id}/wallet`, { balance: parseFloat(v), reason }); say(`${name}: ${money(r.old)} → ${money(r.new)}`); });
 }
+function deletePlayer(id, name) {
+  if (!confirm(`Delete ${name}'s account for good?\n\nThis removes their login, holdings, bank, badges and open bets. If they made a creator coin it is removed and every holder is refunded. Loans are settled, and any MWD they have left leaves the game. Other players' history is not affected.\n\nThis cannot be undone.`)) return;
+  const code = prompt(`To confirm, type the delete code for ${name}:`); if (code === null) return;
+  call(async () => {
+    const r = await Api.post(`/api/admin/players/${id}/delete`, { code: code.trim() });
+    const bits = [`${r.old_username} was deleted.`];
+    if (r.coins_removed.length) bits.push(`Coin removed: ${r.coins_removed.join(", ")}.`);
+    if (r.loans_closed) bits.push(`${r.loans_closed} loan(s) settled.`);
+    bits.push(`${money(r.mwd_left_economy)} MWD left the game.`);
+    say(bits.join(" ")); load();
+  });
+}
 function allOff() { call(async () => { await Api.post("/api/admin/bots/all-off"); say("Every bot is now off."); }); }
 function addBot() {
   call(async () => { await Api.post("/api/admin/bots/new", { username: $("nb-user").value.trim(), display_name: $("nb-name").value.trim(), style: $("nb-style").value, skill: +$("nb-skill").value,
@@ -127,7 +139,7 @@ async function load() {
     $("players-count").textContent = `(${humans.length})`; $("bots-count").textContent = `(${bots.length})`;
     $("players-rows").innerHTML = humans.map(p => `<tr><td><a href="../profile.html?username=${encodeURIComponent(p.username)}"><strong>${esc(p.display_name || p.username)}</strong></a> ${p.is_admin ? '<span class="badge-pill">admin</span>' : ""}</td>
       <td class="price">${money(p.balance)}</td><td class="price">${money(p.net_worth)}</td><td>${p.trades}</td><td>${ago(p.last_seen_at)}</td>
-      <td><div class="chip-row"><a class="btn small secondary" href="../profile.html?username=${encodeURIComponent(p.username)}">Portfolio</a>${p.is_admin ? "" : `<button class="btn small secondary" onclick="setWallet(${p.id}, '${esc(p.username)}', ${p.balance})">Set wallet</button>`}</div></td></tr>`).join("") || `<tr><td colspan="6">No players yet.</td></tr>`;
+      <td><div class="chip-row"><a class="btn small secondary" href="../profile.html?username=${encodeURIComponent(p.username)}">Portfolio</a>${p.is_admin ? "" : `<button class="btn small secondary" onclick="setWallet(${p.id}, '${esc(p.username)}', ${p.balance})">Set wallet</button> <button class="btn small danger" onclick="deletePlayer(${p.id}, '${esc(p.username)}')">Delete account</button>`}</div></td></tr>`).join("") || `<tr><td colspan="6">No players yet.</td></tr>`;
     $("bots-rows").innerHTML = bots.map(b => `<tr style="${b.retired ? "opacity:.5" : ""}">
       <td><strong>${esc(b.display_name || b.username)}</strong> <span class="small-text">@${esc(b.username)}</span></td>
       <td><span class="bot-tag">${b.tracked ? "🤖 tracked" : "🤖 ambient"}</span></td>
