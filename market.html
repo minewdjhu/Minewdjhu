@@ -63,7 +63,8 @@ async function render() {
       </div>
     </div>
     <p class="lede">${esc(m.description || "")}</p>
-    ${m.is_creator_market ? `<p class="subtitle">Created by <a href="profile.html?username=${esc(m.creator_username)}">${esc(m.creator_username)}</a>, equity stake: ${(m.creator_ownership_pct || 0).toFixed(1)}%</p>` : ""}
+    ${m.is_creator_market ? `<p class="subtitle">${m.is_bot_coin ? "🤖 Bot Coin, run by" : "Created by"} <a href="profile.html?username=${esc(m.creator_username)}">${esc(m.creator_username)}</a>, equity stake: ${(m.creator_ownership_pct || 0).toFixed(1)}%</p>` : ""}
+    ${m.is_bot_coin ? `<p class="small-text" style="margin:.2rem 0 .6rem;">⚠️ This coin is controlled by a simulated trader. Like any creator coin, its owner can take money out or rug pull it.</p>` : ""}
 
     <div class="chart-wrap"><canvas class="spark" id="chart"></canvas></div>
 
