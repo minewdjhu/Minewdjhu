@@ -22,13 +22,6 @@
   <h2>Creator markets</h2>
   <table><thead><tr><th>Symbol</th><th>Name</th><th>Creator</th><th>Price</th><th>Today</th><th>Risk</th></tr></thead>
     <tbody id="creator-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table>
-
-  <div id="bot-coins-section" class="hidden">
-    <h2>🤖 Bot Coins</h2>
-    <p class="lede" style="margin-top:0;">Coins controlled by a simulated trader (a bot). They work exactly like creator coins and are just as risky: the bot can take money out of its coin, or rug pull it. Invest only what you're happy to lose.</p>
-    <table><thead><tr><th>Symbol</th><th>Name</th><th>Run by</th><th>Price</th><th>Today</th><th>Risk</th></tr></thead>
-      <tbody id="bot-coin-rows"></tbody></table>
-  </div>
 </main>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
@@ -38,8 +31,7 @@ async function load() {
   try {
     const markets = await Api.get("/api/markets");
     const official = markets.filter(m => !m.is_creator_market);
-    const creator = markets.filter(m => m.is_creator_market && !m.is_bot_coin);
-    const botCoins = markets.filter(m => m.is_bot_coin);
+    const creator = markets.filter(m => m.is_creator_market);
 
     document.getElementById("official-rows").innerHTML = official.map(m => `
       <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
@@ -60,17 +52,6 @@ async function load() {
         <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
         <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
       </tr>`).join("") || `<tr><td colspan="6">No creator-markets yet, be the first!</td></tr>`;
-    const botRow = m => `
-      <tr onclick="window.location='market.html?symbol=${esc(m.symbol)}'" style="cursor:pointer;">
-        <td class="symbol"><a href="market.html?symbol=${esc(m.symbol)}">${esc(m.symbol)}</a> <span title="Controlled by a bot">🤖</span></td>
-        <td>${esc(m.name)}</td>
-        <td>${esc(m.creator_username || "-")}</td>
-        <td class="price">${money(m.price)}</td>
-        <td class="${m.change_pct >= 0 ? 'pct-up' : 'pct-down'}">${pct(m.change_pct)}</td>
-        <td><span class="badge-pill risk-${m.risk_level}">${m.risk_level}</span></td>
-      </tr>`;
-    document.getElementById("bot-coins-section").classList.toggle("hidden", !botCoins.length);
-    document.getElementById("bot-coin-rows").innerHTML = botCoins.map(botRow).join("");
   } catch (e) {
     document.getElementById("official-rows").innerHTML = `<tr><td colspan="6">Couldn't load markets: ${esc(e.message)}</td></tr>`;
   }
