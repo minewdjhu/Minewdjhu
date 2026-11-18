@@ -12,6 +12,7 @@
   <h1>🏛️ Hall of Records</h1>
   <p class="lede">Long-term bragging rights, these update automatically whenever someone beats them.</p>
   <div id="records" class="grid cols-3">Loading…</div>
+  <div id="seasons-box" class="hidden" style="margin-top:2rem;"><h2>🗓️ Past seasons</h2><div id="seasons" class="grid cols-3"></div></div>
 </main>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
@@ -32,6 +33,15 @@ Api.get("/api/records").then(rows => {
     </div>
   `).join("") || "<p>No records set yet, go make some history!</p>";
 }).catch(e => { document.getElementById("records").innerHTML = e.message; });
+Api.get("/api/seasons").then(d => {
+  if (!d.past.length) return;
+  document.getElementById("seasons-box").classList.remove("hidden");
+  document.getElementById("seasons").innerHTML = d.past.map(sn => `
+    <div class="card"><strong>${esc(sn.name)}</strong>
+      <p class="small-text" style="margin:.2rem 0 .5rem;">Ended ${new Date(sn.ended_at).toLocaleDateString()}</p>
+      ${sn.standings.slice(0, 3).map(r => `<div>${["🥇","🥈","🥉"][r.rank - 1] || ""} <a href="profile.html?username=${encodeURIComponent(r.username)}">${esc(r.username)}</a> <span class="small-text">${money(r.net_worth)} MWD</span></div>`).join("") || "<span class='small-text'>No players.</span>"}
+    </div>`).join("");
+}).catch(() => {});
 </script>
 </body>
 </html>
