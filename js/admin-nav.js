@@ -4,7 +4,7 @@ function renderAdminShell(activePage) {
   const pages = [
     ["dashboard.html", "Dashboard"], ["markets.html", "Markets"], ["events.html", "Events"],
     ["news.html", "News"], ["predictions.html", "Predictions"], ["shop.html", "Shop"], ["casino.html", "Casino"],
-    ["players.html", "Players & Bots"], ["wallet.html", "Wallet & loans"], ["creatorcoins.html", "Creator coins"], ["quiz.html", "Quiz questions"], ["economy.html", "Economy"],
+    ["players.html", "Players & Bots"], ["wallet.html", "Wallet & loans"], ["creatorcoins.html", "Creator coins"], ["quiz.html", "Quiz questions"], ["economy.html", "Economy"], ["seasons.html", "Seasons & tools"],
     ["creators.html", "Creators & Badges"], ["audit.html", "Audit log"],
   ];
   el.innerHTML = `
