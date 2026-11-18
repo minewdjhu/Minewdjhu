@@ -10,4 +10,4 @@
 //   const API_BASE_URL = "https://random-words-here.trycloudflare.com";
 //
 // For local testing (backend on the same computer) leave it like this:
-const API_BASE_URL = "https://tub-kurt-seasonal-coordinates.trycloudflare.com";
+const API_BASE_URL = "https://hierarchy-competitive-nova-anybody.trycloudflare.com";
