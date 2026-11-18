@@ -36,6 +36,7 @@ document.getElementById("admin-content").innerHTML = `
       <button class="btn secondary small" onclick="runNow()">Run a bot cycle now (test)</button></div></div>
 
   <h2>Players <span class="small-text" id="players-count"></span></h2>
+  <input id="player-filter" placeholder="Search players..." oninput="filterPlayers()" style="max-width:280px;margin:.4rem 0;">
   <table class="tight"><thead><tr><th>Player</th><th>Wallet</th><th>Net worth</th><th>Trades</th><th>Last seen</th><th></th></tr></thead><tbody id="players-rows"></tbody></table>
 
   <h2>🤖 Bots <span class="small-text" id="bots-count"></span></h2>
@@ -118,6 +119,10 @@ function setWallet(id, name, current) {
   const v = prompt(`Set ${name}'s wallet to exactly how many MWD? (now ${money(current)})`, Math.round(current)); if (v === null) return;
   const reason = prompt("Why? (saved in the audit log and shown to the player)", ""); if (reason === null) return;
   call(async () => { const r = await Api.post(`/api/admin/players/${id}/wallet`, { balance: parseFloat(v), reason }); say(`${name}: ${money(r.old)} → ${money(r.new)}`); });
+}
+function filterPlayers() {
+  const q = $("player-filter").value.trim().toLowerCase();
+  document.querySelectorAll("#players-rows tr").forEach(tr => { tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? "" : "none"; });
 }
 function openBotify(id, name) {
   $("botify-name").textContent = name; $("botify-id").value = id; $("botify-code").value = ""; $("botify-box").showModal();

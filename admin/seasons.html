@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Room | Seasons & tools</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page" id="admin-shell"></main>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin-nav.js"></script>
+<script>
+renderAdminShell("seasons.html");
+const $ = id => document.getElementById(id);
+function note(msg, bad) { const el = $("note"); el.className = "alert " + (bad ? "error" : "success"); el.textContent = msg; el.classList.remove("hidden"); window.scrollTo({ top: 0, behavior: "smooth" }); }
+async function act(fn) { try { await fn(); await render(); } catch (e) { note(e.message, true); } }
+
+async function render() {
+  const content = $("admin-content");
+  let s, m;
+  try { [s, m] = await Promise.all([Api.get("/api/admin/seasons"), Api.get("/api/admin/maintenance")]); }
+  catch (err) { content.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; return; }
+  const keepNote = $("note") && !$("note").classList.contains("hidden") ? { cls: $("note").className, txt: $("note").textContent } : null;
+  content.innerHTML = `
+  <div id="note" class="alert hidden"></div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">🗓️ ${esc(s.current.name)} <span class="small-text">(season ${s.current.number}, started ${new Date(s.current.started_at).toLocaleDateString()})</span></h2>
+    <p class="small-text">Players who join now get the ${s.current.number === 1 ? "Founding Member" : esc(s.current.name) + " Member"} badge.</p>
+    <div class="chip-row"><input id="rename" value="${esc(s.current.name)}" maxlength="40" style="max-width:260px;"><button class="btn small secondary" onclick="renameSeason()">Rename</button></div>
+    <h3>Live top players</h3>
+    <table class="tight"><tbody>${s.live_standings.map(r => `<tr><td>#${r.rank}</td><td>${esc(r.username)}</td><td class="price">${money(r.net_worth)} MWD</td></tr>`).join("") || "<tr><td>No players yet.</td></tr>"}</tbody></table>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">Start a new season</h2>
+    <p class="small-text">This ends <strong>${esc(s.current.name)}</strong>, saves the final standings, and stops new players getting its join badge. <strong>Nobody's MWD, holdings or coins change.</strong> It can't be undone, so the box below asks for a back-up first.</p>
+    <div class="form-grid">
+      <label>Name of the new season<input id="ns-name" maxlength="40" value="Season ${s.current.number + 1}"></label>
+    </div>
+    <div class="switch-row"><span>Give the top 3 of ${esc(s.current.name)} a Champion / Top 3 badge</span><label class="check"><input type="checkbox" id="ns-award" checked> On</label></div>
+    <div class="switch-row"><span>Tell every player (notification)</span><label class="check"><input type="checkbox" id="ns-announce"> On</label></div>
+    <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="startSeason()">Back up, then start the new season</button></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">📣 Message every player</h2>
+    <p class="small-text">Shows in each player's notification bell. Good for updates, events starting, or downtime.</p>
+    <div class="form-grid">
+      <label>Title<input id="bc-title" maxlength="120" placeholder="Casino night starts at 8pm"></label>
+      <label>Page to open (optional)<input id="bc-link" placeholder="casino.html"></label>
+      <label style="grid-column:1/-1;">Message (optional)<input id="bc-msg" maxlength="280"></label>
+    </div>
+    <div class="chip-row" style="margin-top:.8rem;"><button class="btn secondary" onclick="sendBroadcast()">Send to all players</button></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">💾 Backups</h2>
+    <p class="small-text">The database is ${m.database_kb.toLocaleString()} KB. The server also backs up by itself and keeps the newest ${m.keep}. Back up by hand before anything big (a new season, transferring or deleting players).</p>
+    <div class="chip-row"><button class="btn small" onclick="backupNow()">Back up now</button></div>
+    <table class="tight" style="margin-top:.6rem;"><thead><tr><th>File</th><th>Size</th><th>Made</th></tr></thead>
+      <tbody>${m.backups.map(b => `<tr><td class="small-text">${esc(b.name)}</td><td>${b.size_kb.toLocaleString()} KB</td><td>${new Date(b.when + "Z").toLocaleString()}</td></tr>`).join("") || "<tr><td colspan=3>None yet.</td></tr>"}</tbody></table>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Past seasons</h2>
+    ${s.history.filter(h => h.ended_at).map(h => `<h3>${esc(h.name)} <span class="small-text">ended ${new Date(h.ended_at).toLocaleDateString()}</span></h3>
+      <p class="small-text">${h.standings.slice(0, 3).map(r => `#${r.rank} ${esc(r.username)} (${money(r.net_worth)})`).join(" &middot; ") || "No players."}</p>`).join("") || "<p class='small-text'>No past seasons yet.</p>"}
+  </div>`;
+  if (keepNote) { $("note").className = keepNote.cls; $("note").textContent = keepNote.txt; }
+}
+function renameSeason() { act(async () => { const r = await Api.post("/api/admin/seasons/rename", { name: $("rename").value }); note("Season renamed to " + r.name + "."); }); }
+function startSeason() {
+  const name = $("ns-name").value.trim();
+  if (!confirm(`End the current season and start "${name}"?\n\nThis can't be undone. Nobody loses MWD, holdings or coins. The top players of the old season are saved in the history.`)) return;
+  act(async () => {
+    await Api.post("/api/admin/maintenance/backup");
+    const r = await Api.post("/api/admin/seasons/new", { name, award_champions: $("ns-award").checked, announce: $("ns-announce").checked });
+    note(`${r.new} has started. ${r.champions_awarded.length ? "Badges given to: " + r.champions_awarded.join(", ") + "." : ""}`);
+  });
+}
+function sendBroadcast() {
+  const title = $("bc-title").value.trim(); if (!title) { note("Give the message a title.", true); return; }
+  if (!confirm("Send this to every player?")) return;
+  act(async () => { const r = await Api.post("/api/admin/broadcast", { title, message: $("bc-msg").value, link: $("bc-link").value }); note(`Sent to ${r.sent_to} players.`); });
+}
+function backupNow() { act(async () => { const r = await Api.post("/api/admin/maintenance/backup"); note("Backup saved: " + r.file); }); }
+render();
+</script>
+</body>
+</html>
