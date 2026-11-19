@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily quests | Minewdjhu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav"></div>
+<main class="page narrow">
+  <h1>🎯 Daily quests</h1>
+  <p class="lede">Three goals, the same for everyone, new every day at 00:00 UTC. Finish one, tap <strong>Collect</strong>, and the MWD goes straight to your wallet. Collect all three for a bonus.</p>
+  <div id="error" class="alert error hidden"></div><div id="success" class="alert success hidden"></div>
+  <div id="timer" class="small-text" style="margin-bottom:.8rem;"></div>
+  <div id="quests">Loading…</div>
+</main>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+let resetsAt = null;
+function tick() {
+  if (!resetsAt) return;
+  const ms = new Date(resetsAt + "Z") - new Date();
+  const h = Math.max(0, Math.floor(ms / 3600000)), m = Math.max(0, Math.floor((ms % 3600000) / 60000));
+  document.getElementById("timer").textContent = `New quests in ${h}h ${m}m`;
+}
+async function load() {
+  clearError(document.getElementById("error"));
+  try {
+    const q = await Api.get("/api/quests");
+    resetsAt = q.resets_at; tick();
+    const box = document.getElementById("quests");
+    if (!q.enabled) { box.innerHTML = `<div class="card">Daily quests are taking a break. Check back soon.</div>`; return; }
+    box.innerHTML = q.quests.map(x => `
+      <div class="card" style="margin-bottom:.8rem;${x.claimed ? "opacity:.65;" : ""}">
+        <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;">
+          <div><strong>${esc(x.title)}</strong><div class="small-text">${esc(x.description)}</div></div>
+          <div>${x.claimed ? `<span class="badge-pill">&#9989; Collected</span>`
+            : x.done ? `<button class="btn" onclick="collect('${esc(x.key)}')">Collect ${x.reward} MWD</button>`
+            : `<span class="small-text">Reward: ${x.reward} MWD</span>`}</div>
+        </div>
+        <div class="progress-track" style="margin-top:.6rem;"><div class="progress-fill" style="width:${Math.round(x.progress / x.target * 100)}%"></div></div>
+        <div class="small-text" style="margin-top:.2rem;">${x.progress} / ${x.target}</div>
+      </div>`).join("") + `
+      <div class="card" style="text-align:center;">
+        ${q.sweep_claimed ? "🏆 Bonus collected. Come back tomorrow!" : q.all_claimed ? "🏆 All done!" : `🎁 Collect all three today for a <strong>${q.sweep_bonus} MWD</strong> bonus`}
+      </div>`;
+  } catch (e) { showError(document.getElementById("error"), e); document.getElementById("quests").innerHTML = ""; }
+}
+async function collect(key) {
+  const ok = document.getElementById("success"); ok.classList.add("hidden");
+  try {
+    const r = await Api.post(`/api/quests/${encodeURIComponent(key)}/claim`);
+    ok.textContent = `+${r.reward} MWD for "${r.title}"` + (r.bonus ? ` and a +${r.bonus} MWD bonus for finishing all three!` : "") + ".";
+    ok.classList.remove("hidden");
+  } catch (e) { showError(document.getElementById("error"), e); }
+  load();
+}
+if (!Auth.isLoggedIn()) { window.location = "login.html"; } else { load(); setInterval(tick, 30000); }
+</script>
+</body>
+</html>
