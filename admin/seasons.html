@@ -20,8 +20,8 @@ async function act(fn) { try { await fn(); await render(); } catch (e) { note(e.
 
 async function render() {
   const content = $("admin-content");
-  let s, m;
-  try { [s, m] = await Promise.all([Api.get("/api/admin/seasons"), Api.get("/api/admin/maintenance")]); }
+  let s, m, d, qc, eh;
+  try { [s, m, d, qc, eh] = await Promise.all([Api.get("/api/admin/seasons"), Api.get("/api/admin/maintenance"), Api.get("/api/admin/discord-digest"), Api.get("/api/admin/quests-config"), Api.get("/api/admin/economy-health")]); }
   catch (err) { content.innerHTML = `<div class="alert error">${esc(err.message)}</div>`; return; }
   const keepNote = $("note") && !$("note").classList.contains("hidden") ? { cls: $("note").className, txt: $("note").textContent } : null;
   content.innerHTML = `
@@ -44,6 +44,32 @@ async function render() {
     <div class="switch-row"><span>Give the top 3 of ${esc(s.current.name)} a Champion / Top 3 badge</span><label class="check"><input type="checkbox" id="ns-award" checked> On</label></div>
     <div class="switch-row"><span>Tell every player (notification)</span><label class="check"><input type="checkbox" id="ns-announce"> On</label></div>
     <div class="chip-row" style="margin-top:.8rem;"><button class="btn" onclick="startSeason()">Back up, then start the new season</button></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">📊 Discord market update</h2>
+    <p class="small-text">Posts a summary (top gainers and losers, the leaderboard, live events, open predictions) in your markets channel on a schedule. The bot must be running with the updated announcer.</p>
+    <div class="switch-row"><span>Post a market update to Discord automatically</span><label class="check"><input type="checkbox" id="dg-on" ${d.enabled ? "checked" : ""}> On</label></div>
+    <div class="form-grid"><label>Every how many hours (1 to 168)<input type="number" id="dg-hours" min="1" max="168" value="${d.hours}"></label></div>
+    <p class="small-text">${d.enabled ? (d.next_due_at ? "Next update around " + new Date(d.next_due_at + "Z").toLocaleString() + "." : "The first one is sent soon.") : "Currently off."}${d.last_sent_at ? " Last sent " + new Date(d.last_sent_at + "Z").toLocaleString() + "." : ""}</p>
+    <div class="chip-row"><button class="btn small" onclick="saveDigest()">Save</button><button class="btn small secondary" onclick="sendDigestNow()">Send one now</button></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">🎯 Daily quests</h2>
+    <p class="small-text">Three goals a day, the same for everyone, with small MWD rewards. Today's: <strong>${qc.today.join(", ")}</strong>. About ${eh.quests_issued.toLocaleString()} MWD has been paid out by quests so far.</p>
+    <div class="switch-row"><span>Daily quests are on</span><label class="check"><input type="checkbox" id="q-on" ${qc.enabled ? "checked" : ""}> On</label></div>
+    <div class="form-grid"><label>Reward multiplier (1 = normal, 0 to 5)<input type="number" id="q-mult" min="0" max="5" step="0.25" value="${qc.reward_mult}"></label></div>
+    <div class="chip-row" style="margin-top:.6rem;"><button class="btn small" onclick="saveQuests()">Save</button></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2 style="margin-top:0;">💹 Economy health</h2>
+    <p class="small-text">Where the MWD is right now. Players and bots are kept apart.</p>
+    <table class="tight"><thead><tr><th></th><th>People</th><th>Wallets</th><th>Banks</th><th>Invested</th><th>Total</th></tr></thead><tbody>
+      ${["players", "bots"].map(k => `<tr><td><strong>${k === "players" ? "Players" : "Bots"}</strong></td><td>${eh[k].count}</td><td>${money(eh[k].wallets)}</td><td>${money(eh[k].banks)}</td><td>${money(eh[k].invested)}</td><td>${money(eh[k].total)}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="small-text" style="margin-top:.6rem;">Owed on active loans: <strong>${money(eh.owed_on_loans)}</strong> &middot; Top 10 players hold <strong>${eh.top10_share_pct}%</strong> of player wealth &middot; Typical player (median): <strong>${money(eh.median_player)}</strong>, average <strong>${money(eh.average_player)}</strong> &middot; Active in the last 24 hours: <strong>${eh.active_24h}</strong> &middot; Daily bonuses paid out so far: <strong>${money(eh.bonus_issued)}</strong></p>
   </div>
 
   <div class="card" style="margin-bottom:1rem;">
@@ -87,6 +113,9 @@ function sendBroadcast() {
   if (!confirm("Send this to every player?")) return;
   act(async () => { const r = await Api.post("/api/admin/broadcast", { title, message: $("bc-msg").value, link: $("bc-link").value }); note(`Sent to ${r.sent_to} players.`); });
 }
+function saveDigest() { act(async () => { const r = await Api.post("/api/admin/discord-digest", { enabled: $("dg-on").checked, hours: +$("dg-hours").value }); note(r.enabled ? `Market updates will post every ${r.hours} hours.` : "Automatic market updates are off."); }); }
+function sendDigestNow() { if (!confirm("Post a market update to Discord now?")) return; act(async () => { await Api.post("/api/admin/discord-digest/send-now"); note("Sent. It appears in your markets channel in a moment."); }); }
+function saveQuests() { act(async () => { const r = await Api.post("/api/admin/quests-config", { enabled: $("q-on").checked, reward_mult: +$("q-mult").value }); note(r.enabled ? `Daily quests are on (rewards x${r.reward_mult}).` : "Daily quests are off."); }); }
 function backupNow() { act(async () => { const r = await Api.post("/api/admin/maintenance/backup"); note("Backup saved: " + r.file); }); }
 render();
 </script>
